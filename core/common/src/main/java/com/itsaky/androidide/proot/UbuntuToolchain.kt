@@ -42,7 +42,8 @@ enum class ToolchainPiece(val label: String, val sizeHint: String) {
  */
 object UbuntuToolchain {
 
-  const val GRADLE_VERSION = "8.8"
+  /** Must match `templates-api`'s GRADLE_DISTRIBUTION_VERSION, or the wrapper fetches a second distro. */
+  const val GRADLE_VERSION = "8.14.3"
   const val SDK_RELEASE = "36.0.2"
   const val BUILD_TOOLS = "36.1.0"
   const val DEFAULT_PLATFORM = 34

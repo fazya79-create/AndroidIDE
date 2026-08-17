@@ -202,6 +202,17 @@ object ProotConfig {
     return args.toTypedArray()
   }
 
+  /**
+   * Guest path of the harvested offline Maven repository, exported so the generated init script
+   * can register it. `filesDir` is bound at an identical guest path, so the host path resolves
+   * unchanged inside the rootfs.
+   */
+  private fun offlineRepoEnv(context: Context): List<String> {
+    val repo = File(context.filesDir, "home/maven/localMvnRepository")
+    return if (repo.isDirectory) listOf("ANDROIDIDE_OFFLINE_REPO=${repo.absolutePath}")
+    else emptyList()
+  }
+
   /** Run [command] non-interactively; used to launch the tooling server and helpers. */
   fun exec(
     context: Context,
@@ -216,6 +227,7 @@ object ProotConfig {
     binds.forEach { args += "--bind=$it" }
     args += guestEnv(emptyList())
     args += "TERM=dumb"
+    args += offlineRepoEnv(context)
     args += extraEnv
     args += command
     return args

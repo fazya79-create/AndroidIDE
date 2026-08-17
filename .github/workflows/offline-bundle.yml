@@ -1,0 +1,276 @@
+name: Offline bundle
+
+# Harvests every dependency a generated project needs into a Maven repository, so the first
+# on-device build resolves from disk instead of spending ~20 minutes on network round trips.
+#
+# The pinned AGP/Gradle/Kotlin trio below MUST match utilities/templates-api/.../constants.kt.
+# Re-run this workflow and bump OfflineBundle.VERSION whenever any of them changes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish the bundle under'
+        required: true
+        default: 'offline-bundle-v1'
+
+permissions:
+  contents: write
+
+env:
+  AGP_VERSION: '8.11.0'
+  GRADLE_VERSION: '8.14.3'
+  KOTLIN_VERSION: '1.9.22'
+  COMPOSE_COMPILER_VERSION: '1.5.10'
+  COMPILE_SDK: '33'
+  MIN_SDK: '21'
+  TARGET_SDK: '33'
+
+jobs:
+  harvest:
+    name: Harvest dependency repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install the platform the template compiles against
+        run: |
+          sdkmanager "platforms;android-${COMPILE_SDK}" "build-tools;34.0.0" > /dev/null
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+
+      - name: Generate a template project that mirrors the IDE's own template
+        run: |
+          mkdir -p probe/app/src/main/java/com/example/probe
+          mkdir -p probe/app/src/main/res/values
+
+          cat > probe/settings.gradle.kts <<EOF
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+
+          dependencyResolutionManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+
+          rootProject.name = "probe"
+          include(":app")
+          EOF
+
+          cat > probe/build.gradle.kts <<EOF
+          plugins {
+              id("com.android.application") version "${AGP_VERSION}" apply false
+              id("com.android.library") version "${AGP_VERSION}" apply false
+              id("org.jetbrains.kotlin.android") version "${KOTLIN_VERSION}" apply false
+          }
+          EOF
+
+          # Both view-based and Compose projects must resolve, so the bundle covers either choice.
+          cat > probe/app/build.gradle.kts <<EOF
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+
+          android {
+              namespace = "com.example.probe"
+              compileSdk = ${COMPILE_SDK}
+
+              defaultConfig {
+                  applicationId = "com.example.probe"
+                  minSdk = ${MIN_SDK}
+                  targetSdk = ${TARGET_SDK}
+                  versionCode = 1
+                  versionName = "1.0"
+                  vectorDrawables { useSupportLibrary = true }
+                  testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+              }
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+
+              kotlinOptions { jvmTarget = "17" }
+
+              buildTypes {
+                  release {
+                      isMinifyEnabled = true
+                      proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+                  }
+              }
+
+              buildFeatures {
+                  viewBinding = true
+                  compose = true
+              }
+
+              composeOptions {
+                  kotlinCompilerExtensionVersion = "${COMPOSE_COMPILER_VERSION}"
+              }
+          }
+
+          dependencies {
+              implementation("androidx.core:core-ktx:1.10.1")
+              implementation("androidx.appcompat:appcompat:1.6.1")
+              implementation("com.google.android.material:material:1.9.0")
+              implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+              implementation("androidx.activity:activity-compose:1.7.2")
+              implementation(platform("androidx.compose:compose-bom:2023.06.01"))
+              implementation("androidx.compose.ui:ui")
+              implementation("androidx.compose.ui:ui-graphics")
+              implementation("androidx.compose.ui:ui-tooling-preview")
+              implementation("androidx.compose.material3:material3")
+              debugImplementation("androidx.compose.ui:ui-tooling")
+              testImplementation("junit:junit:4.13.2")
+              androidTestImplementation("androidx.test.ext:junit:1.1.5")
+              androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+              androidTestImplementation(platform("androidx.compose:compose-bom:2023.06.01"))
+              androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+          }
+          EOF
+
+          cat > probe/app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application android:label="probe" android:theme="@style/Theme.AppCompat" />
+          </manifest>
+          EOF
+
+          cat > probe/app/src/main/java/com/example/probe/MainActivity.kt <<'EOF'
+          package com.example.probe
+
+          import android.os.Bundle
+          import androidx.appcompat.app.AppCompatActivity
+
+          class MainActivity : AppCompatActivity() {
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+              }
+          }
+          EOF
+
+          cat > probe/gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g
+          android.useAndroidX=true
+          kotlin.code.style=official
+          EOF
+
+      - name: Resolve every configuration into an isolated Gradle home
+        working-directory: probe
+        run: |
+          curl -sSLo gradle.zip "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
+          unzip -q gradle.zip
+          GRADLE="$PWD/gradle-${GRADLE_VERSION}/bin/gradle"
+
+          # A build only downloads what its tasks need, so resolving the classpaths explicitly is
+          # what makes the bundle complete. `assemble` on top pulls in the compiler, R8, lint and
+          # aapt2 workers that dependency resolution alone never touches.
+          cat >> app/build.gradle.kts <<'EOF'
+
+          tasks.register("resolveEverything") {
+              doLast {
+                  configurations
+                      .filter { it.isCanBeResolved }
+                      .forEach { configuration ->
+                          try {
+                              configuration.resolve()
+                              logger.lifecycle("resolved ${configuration.name}")
+                          } catch (e: Exception) {
+                              logger.lifecycle("skipped ${configuration.name}: ${e.message}")
+                          }
+                      }
+              }
+          }
+          EOF
+
+          "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home" resolveEverything
+          "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home" assembleDebug assembleRelease
+          "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home" lintDebug || true
+          "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home" compileDebugAndroidTestKotlin || true
+
+      - name: Convert the module cache into a Maven repository layout
+        run: |
+          python3 - <<'PY'
+          import os, shutil
+          from pathlib import Path
+
+          cache = Path("probe/gradle-home/caches/modules-2/files-2.1")
+          out = Path("localMvnRepository")
+          keep = {".jar", ".aar", ".pom", ".module", ".klib"}
+          copied = 0
+
+          # Cache layout: files-2.1/<group>/<artifact>/<version>/<sha1>/<file>
+          # Maven layout:  <group as dirs>/<artifact>/<version>/<file>
+          for path in cache.rglob("*"):
+              if not path.is_file() or path.suffix.lower() not in keep:
+                  continue
+              rel = path.relative_to(cache).parts
+              if len(rel) < 5:
+                  continue
+              group, artifact, version = rel[0], rel[1], rel[2]
+              target = out.joinpath(*group.split("."), artifact, version, path.name)
+              target.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copy2(path, target)
+              copied += 1
+
+          print(f"copied {copied} artifacts")
+          if copied == 0:
+              raise SystemExit("harvest produced nothing - the resolution step must have failed")
+          PY
+
+      - name: Zip the repository with stored (uncompressed) entries
+        run: |
+          # Jars stay uncompressed so Gradle can mmap them on device; the outer zip is stored too
+          # because its contents are already-compressed archives.
+          cd localMvnRepository
+          zip -0 -q -r ../localMvnRepository.zip .
+          cd ..
+          ls -la localMvnRepository.zip
+          du -sh localMvnRepository
+
+      - name: Publish checksums
+        run: |
+          sha256sum localMvnRepository.zip | tee checksums.txt
+
+      - name: Summarize
+        run: |
+          {
+            echo "### Offline bundle"
+            echo
+            echo "| item | value |"
+            echo "|---|---|"
+            echo "| AGP | ${AGP_VERSION} |"
+            echo "| Gradle | ${GRADLE_VERSION} |"
+            echo "| Kotlin | ${KOTLIN_VERSION} |"
+            echo "| artifacts | $(find localMvnRepository -type f | wc -l) |"
+            echo "| archive | $(du -h localMvnRepository.zip | cut -f1) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 ||
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "Offline dependency bundle" \
+              --notes "Maven repository harvested for AGP ${AGP_VERSION}, Gradle ${GRADLE_VERSION}, Kotlin ${KOTLIN_VERSION}."
+
+          gh release upload "$TAG" localMvnRepository.zip checksums.txt \
+            --repo "$GITHUB_REPOSITORY" --clobber

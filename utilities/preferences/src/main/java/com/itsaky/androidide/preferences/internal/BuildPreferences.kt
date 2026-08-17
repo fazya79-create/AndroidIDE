@@ -65,9 +65,13 @@ object BuildPreferences {
       prefManager.putBoolean(BUILD_CACHE, enabled)
     }
 
-  /** Switch for Gradle `--offline` option. */
+  /**
+   * Switch for Gradle `--offline` option. On by default: the prebuilt bundle already contains
+   * every dependency the pinned AGP/Gradle/Kotlin trio needs, so builds must not reach the
+   * network. Adding a dependency that is not in the bundle fails until this is turned off once.
+   */
   var isOfflineEnabled: Boolean
-    get() = prefManager.getBoolean(OFFLINE_MODE)
+    get() = prefManager.getBoolean(OFFLINE_MODE, true)
     set(enabled) {
       prefManager.putBoolean(OFFLINE_MODE, enabled)
     }

@@ -21,12 +21,17 @@ package com.itsaky.androidide.templates
  * @author Akash Yadav
  */
 
-const val ANDROID_GRADLE_PLUGIN_VERSION = "8.0.0"
-const val GRADLE_DISTRIBUTION_VERSION = "8.8"
-const val KOTLIN_VERSION = "1.8.21"
+/*
+ * Pinned so a single harvested offline Maven repository can satisfy every generated project.
+ * These are the versions CodeOnTheGo ships, i.e. a combination already proven to build on-device.
+ * Changing any of them invalidates the offline bundle and requires re-harvesting it.
+ */
+const val ANDROID_GRADLE_PLUGIN_VERSION = "8.11.0"
+const val GRADLE_DISTRIBUTION_VERSION = "8.14.3"
+const val KOTLIN_VERSION = "1.9.22"
 
 val TARGET_SDK_VERSION = Sdk.Tiramisu
 val COMPILE_SDK_VERSION = Sdk.Tiramisu
 
-const val JAVA_SOURCE_VERSION = "11"
-const val JAVA_TARGET_VERSION = "11"
+const val JAVA_SOURCE_VERSION = "17"
+const val JAVA_TARGET_VERSION = "17"
