@@ -176,21 +176,28 @@ object ProotConfig {
     )
   }
 
-  /** Interactive login shell, optionally running [bootCommand] first. */
+  /**
+   * Interactive login shell, optionally running [bootCommand] first.
+   *
+   * When [keepAlive] is `true` the shell stays open after [bootCommand] finishes. Pass `false`
+   * for one-shot sessions such as the toolchain installer, so the session exits and the caller
+   * receives the exit status.
+   */
   fun shellArgs(
     context: Context,
     guestCwd: String = "/root",
-    bootCommand: String? = null
+    bootCommand: String? = null,
+    keepAlive: Boolean = true
   ): Array<String> {
     val args = baseArgs(context, guestCwd)
     storageBinds.forEach { args += "--bind=$it" }
     args += "--bind=${toolchainBind(context)}"
     args += guestEnv(emptyList())
     args += "TERM=xterm-256color"
-    args += if (bootCommand == null) {
-      listOf("/usr/bin/bash", "-l")
-    } else {
-      listOf("/usr/bin/bash", "-lc", "$bootCommand; exec /usr/bin/bash -l")
+    args += when {
+      bootCommand == null -> listOf("/usr/bin/bash", "-l")
+      keepAlive -> listOf("/usr/bin/bash", "-lc", "$bootCommand; exec /usr/bin/bash -l")
+      else -> listOf("/usr/bin/bash", "-lc", bootCommand)
     }
     return args.toTypedArray()
   }

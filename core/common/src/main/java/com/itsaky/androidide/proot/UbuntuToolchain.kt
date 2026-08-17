@@ -54,6 +54,15 @@ object UbuntuToolchain {
   private const val GRADLE_URL =
     "https://services.gradle.org/distributions/gradle-$GRADLE_VERSION-bin.zip"
 
+  /**
+   * Temurin ships a self-contained JDK directory. apt's `openjdk-17-jdk-headless` would install
+   * to a versioned path inside the rootfs, and symlinking `/opt/jdk` to it produces a
+   * guest-absolute link that is dangling when read from the host — which breaks JDK detection.
+   */
+  private const val JDK_URL =
+    "https://github.com/adoptium/temurin17-binaries/releases/download/" +
+      "jdk-17.0.20%2B8/OpenJDK17U-jdk_aarch64_linux_hotspot_17.0.20_8.tar.gz"
+
   private const val SCRIPT_DIR = "root/androidide-setup"
   private const val SCRIPT_NAME = "install-toolchain.sh"
 
@@ -83,7 +92,8 @@ object UbuntuToolchain {
       script.writeText(buildScript(platform))
       script.setExecutable(true)
     }
-    return "bash /${SCRIPT_DIR}/$SCRIPT_NAME"
+    // `exit` terminates the login shell so the terminal closes and onboarding can continue.
+    return "bash /${SCRIPT_DIR}/$SCRIPT_NAME && exit 0 || exit 1"
   }
 
   private fun buildScript(platform: Int): String = buildString {
@@ -100,10 +110,14 @@ object UbuntuToolchain {
     appendLine("apt-get install -y --no-install-recommends curl unzip xz-utils ca-certificates")
     appendLine()
     appendLine("if [ ! -x $jdk/bin/java ]; then")
-    appendLine("  echo '==> installing OpenJDK 17'")
-    appendLine("  apt-get install -y --no-install-recommends openjdk-17-jdk-headless")
-    appendLine("  jdk_real=\$(dirname \$(dirname \$(readlink -f \$(command -v java))))")
-    appendLine("  ln -sfn \"\$jdk_real\" $jdk")
+    appendLine("  echo '==> downloading OpenJDK 17'")
+    appendLine("  cd $opt")
+    appendLine("  curl -fL --retry 3 -o jdk.tar.gz $JDK_URL")
+    appendLine("  echo '==> extracting OpenJDK 17'")
+    appendLine("  rm -rf jdk jdk-tmp && mkdir jdk-tmp")
+    appendLine("  tar -xzf jdk.tar.gz -C jdk-tmp --strip-components=1")
+    appendLine("  rm -f jdk.tar.gz")
+    appendLine("  mv jdk-tmp jdk")
     appendLine("fi")
     appendLine("$jdk/bin/java -version")
     appendLine()

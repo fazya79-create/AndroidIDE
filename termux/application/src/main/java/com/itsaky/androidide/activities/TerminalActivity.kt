@@ -184,7 +184,8 @@ class TerminalActivity : TermuxActivity() {
         /* executablePath = */ ProotConfig.prootBinary(this@TerminalActivity),
         /* arguments = */ ProotConfig.shellArgs(
           context = this@TerminalActivity,
-          bootCommand = bootCommand
+          bootCommand = bootCommand,
+          keepAlive = false
         ).drop(1).toTypedArray(),
         /* stdin = */ null,
         /* workingDirectory = */ Environment.HOME.absolutePath,

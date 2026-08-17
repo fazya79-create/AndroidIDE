@@ -36,9 +36,13 @@ class IdeTerminalSessionClient(
       finishedSession)
 
     // if the finished session was performing tools installation
-    // then set the result code for the installation process
+    // then report the result and leave the terminal, so onboarding can continue
     if (termuxSession?.executionCommand?.shellName == TerminalActivity.SETUP_SESSION_NAME) {
       mActivity.setResult(finishedSession.exitStatus)
+      if (finishedSession.exitStatus == 0) {
+        mActivity.finishActivityIfNotFinishing()
+        return
+      }
     }
 
     super.onSessionFinished(finishedSession)
