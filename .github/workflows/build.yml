@@ -33,6 +33,17 @@ jobs:
       - name: Change Gradle wrapper permissions
         run: chmod +x ./gradlew
 
+      - name: Create debug keystore
+        run: |
+          mkdir -p ~/.android
+          keytool -genkeypair -v \
+            -keystore ~/.android/debug.keystore \
+            -storepass android -keypass android \
+            -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+          keytool -list -keystore ~/.android/debug.keystore -storepass android
+
       - name: Restore cache
         uses: actions/cache@v4
         with:
