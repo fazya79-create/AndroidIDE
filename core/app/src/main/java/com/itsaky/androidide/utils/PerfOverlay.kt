@@ -48,7 +48,7 @@ object PerfOverlay {
 
     runCatching {
       DebugOverlay.Builder(application)
-        .modules(FpsModule(), CpuUsageModule(), MemInfoModule())
+        .modules(FpsModule(), CpuUsageModule(), MemInfoModule(application))
         .position(Position.BOTTOM_START)
         .bgColor(Color.parseColor("#80000000"))
         .textColor(Color.WHITE)
