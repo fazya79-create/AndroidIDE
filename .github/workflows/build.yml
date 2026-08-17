@@ -1,0 +1,58 @@
+name: Build
+
+on:
+  push:
+    branches: [ "dev", "main" ]
+    paths-ignore:
+      - '**.md'
+      - 'fastlane/**'
+  workflow_dispatch: { }
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  BUILD_JAVA_VERSION: '17'
+  BUILD_JAVA_DIST: 'temurin'
+
+jobs:
+  build_apk:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+          fetch-depth: 0
+
+      - name: Set up JDK ${{ env.BUILD_JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.BUILD_JAVA_VERSION }}
+          distribution: ${{ env.BUILD_JAVA_DIST }}
+
+      - name: Change Gradle wrapper permissions
+        run: chmod +x ./gradlew
+
+      - name: Restore cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Assemble debug APK
+        run: ./gradlew :core:app:assembleDebug --stacktrace
+
+      - name: List outputs
+        if: ${{ always() }}
+        run: find core/app/build/outputs -name '*.apk' -print 2>/dev/null || true
+
+      - name: Upload arm64-v8a debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-arm64-v8a-debug
+          path: core/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
+          if-no-files-found: error
