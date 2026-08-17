@@ -71,6 +71,9 @@ class TerminalActivity : TermuxActivity() {
 
     /** Shell name of the session that installs the build toolchain. */
     const val SETUP_SESSION_NAME = "IDE setup"
+
+    /** Mirrors the private limit in `TermuxTerminalSessionActivityClient`. */
+    private const val MAX_SESSIONS = 8
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -123,11 +126,58 @@ class TerminalActivity : TermuxActivity() {
     sessionName: String?,
     workingDirectory: String?
   ) {
-    if (canAddNewSessions) {
-      super.onCreateNewSession(isFailsafe, sessionName, workingDirectory)
-    } else {
+    if (!canAddNewSessions) {
       flashError(R.string.msg_terminal_new_sessions_disabled)
+      return
     }
+
+    if (isFailsafe || !ProotConfig.isInstalled(this)) {
+      super.onCreateNewSession(isFailsafe, sessionName, workingDirectory)
+      return
+    }
+
+    addUbuntuSession(sessionName)
+  }
+
+  /**
+   * Opens an interactive login shell inside the Ubuntu rootfs.
+   *
+   * The base implementation asks the service for a session with a `null` executable, which means
+   * "the default shell" — a Termux bootstrap path that no longer exists in this build. The kernel
+   * then falls back to Android's `/system/bin/sh`, where bash, apt and the toolchain are all
+   * missing. Every non-failsafe session therefore has to go through proot explicitly.
+   */
+  private fun addUbuntuSession(sessionName: String?) {
+    val service = termuxService ?: return
+
+    if (service.termuxSessionsSize >= MAX_SESSIONS) {
+      MaterialAlertDialogBuilder(this)
+        .setTitle(R.string.title_max_terminals_reached)
+        .setMessage(R.string.msg_max_terminals_reached)
+        .setPositiveButton(android.R.string.ok, null)
+        .show()
+      return
+    }
+
+    ProotConfig.prepareMounts(this)
+    ProotConfig.registerAndroidIds(this)
+    ProotConfig.writeShellProfile(this)
+
+    val session = service.createTermuxSession(
+      /* executablePath = */ ProotConfig.prootBinary(this),
+      /* arguments = */ ProotConfig.shellArgs(context = this).drop(1).toTypedArray(),
+      /* stdin = */ null,
+      /* workingDirectory = */ Environment.HOME.absolutePath,
+      /* isFailSafe = */ false,
+      /* sessionName = */ sessionName,
+      /* additionalEnvironment = */ HashMap(ProotConfig.prootEnvMap(this))
+    ) ?: run {
+      flashError(R.string.msg_cannot_create_terminal_session)
+      return
+    }
+
+    termuxTerminalSessionClient.setCurrentSession(session.terminalSession)
+    drawer.closeDrawers()
   }
 
   override fun setupTermuxSessionOnServiceConnected(
