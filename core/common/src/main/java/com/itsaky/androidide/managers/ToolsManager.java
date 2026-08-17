@@ -18,6 +18,7 @@
 package com.itsaky.androidide.managers;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.blankj.utilcode.util.FileUtils;
 import com.blankj.utilcode.util.ResourceUtils;
@@ -159,11 +160,57 @@ public class ToolsManager {
     }
   }
 
+  /**
+   * Makes the boot classpath JAR available to the Java language server. Prefers the platform JAR
+   * from the installed Android SDK — it matches the platform the project actually compiles
+   * against — and only falls back to the bundled copy when no SDK platform is present.
+   */
   private static void extractAndroidJar() {
-    if (!Environment.ANDROID_JAR.exists()) {
-      ResourceUtils.copyFileFromAssets(getCommonAsset("android.jar"),
-          Environment.ANDROID_JAR.getAbsolutePath());
+    final var sdkJar = findSdkPlatformJar();
+    if (sdkJar != null) {
+      Environment.ANDROID_JAR = sdkJar;
+      return;
     }
+
+    LOG.warn("No Android SDK platform installed yet; Java completion is unavailable until"
+        + " the build toolchain has been set up.");
+  }
+
+  /** Returns the highest-API {@code android.jar} from the installed SDK, or {@code null}. */
+  @Nullable
+  private static File findSdkPlatformJar() {
+    final var platforms = new File(Environment.ANDROID_HOME, "platforms");
+    final var dirs = platforms.listFiles();
+    if (dirs == null) {
+      return null;
+    }
+
+    File best = null;
+    int bestApi = -1;
+    for (final var dir : dirs) {
+      final var jar = new File(dir, "android.jar");
+      if (!jar.isFile()) {
+        continue;
+      }
+
+      final var name = dir.getName();
+      final var dash = name.lastIndexOf('-');
+      int api = -1;
+      if (dash != -1) {
+        try {
+          api = Integer.parseInt(name.substring(dash + 1));
+        } catch (NumberFormatException ignored) {
+          // preview platforms such as 'android-VanillaIceCream' are not comparable
+        }
+      }
+
+      if (api > bestApi) {
+        bestApi = api;
+        best = jar;
+      }
+    }
+
+    return best;
   }
 
   private static void deleteIdeenv() {

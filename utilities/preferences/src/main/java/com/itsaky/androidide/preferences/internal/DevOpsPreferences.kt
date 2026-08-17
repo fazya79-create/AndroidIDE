@@ -27,7 +27,6 @@ object DevOpsPreferences {
   const val KEY_DEVOPTS_DEBUGGING = "${KEY_DEVOPTS}.debugging"
   const val KEY_DEVOPTS_DEBUGGING_DUMPLOGS = "${KEY_DEVOPTS_DEBUGGING}.dumpLogs"
   const val KEY_DEVOPTS_DEBUGGING_ENABLE_LOGSENDER = "${KEY_DEVOPTS_DEBUGGING}.enableLogsender"
-  const val KEY_DEVOPTS_DEBUGGING_PERF_OVERLAY = "${KEY_DEVOPTS_DEBUGGING}.perfOverlay"
 
   var dumpLogs: Boolean
     get() = prefManager.getBoolean(KEY_DEVOPTS_DEBUGGING_DUMPLOGS, false)
@@ -41,10 +40,4 @@ object DevOpsPreferences {
       prefManager.putBoolean(KEY_DEVOPTS_DEBUGGING_ENABLE_LOGSENDER, value)
     }
 
-  /** Shows the FPS/CPU/memory overlay. Off by default; the overlay itself costs frames. */
-  var perfOverlayEnabled: Boolean
-    get() = prefManager.getBoolean(KEY_DEVOPTS_DEBUGGING_PERF_OVERLAY, false)
-    set(value) {
-      prefManager.putBoolean(KEY_DEVOPTS_DEBUGGING_PERF_OVERLAY, value)
-    }
 }

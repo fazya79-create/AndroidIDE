@@ -52,7 +52,6 @@ import com.itsaky.androidide.syntax.colorschemes.SchemeAndroidIDE
 import com.itsaky.androidide.treesitter.TreeSitter
 import com.itsaky.androidide.ui.themes.IDETheme
 import com.itsaky.androidide.ui.themes.IThemeManager
-import com.itsaky.androidide.utils.PerfOverlay
 import com.itsaky.androidide.utils.RecyclableObjectPool
 import com.itsaky.androidide.utils.VMUtils
 import com.itsaky.androidide.utils.flashError
@@ -100,8 +99,6 @@ class IDEApplication : TermuxApplication() {
         startLogcatReader()
       }
     }
-
-    PerfOverlay.installIfEnabled(this)
 
     EventBus.builder()
       .addIndex(AppEventsIndex())

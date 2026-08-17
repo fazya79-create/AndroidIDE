@@ -15,7 +15,7 @@ env:
 
 jobs:
   build_apk:
-    name: Build debug APK
+    name: Build release APK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -33,17 +33,6 @@ jobs:
       - name: Change Gradle wrapper permissions
         run: chmod +x ./gradlew
 
-      - name: Create debug keystore
-        run: |
-          mkdir -p ~/.android
-          keytool -genkeypair -v \
-            -keystore ~/.android/debug.keystore \
-            -storepass android -keypass android \
-            -alias androiddebugkey \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
-          keytool -list -keystore ~/.android/debug.keystore -storepass android
-
       - name: Restore cache
         uses: actions/cache@v4
         with:
@@ -54,16 +43,27 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Assemble debug APK
-        run: ./gradlew :core:app:assembleDebug --stacktrace
+      - name: Assemble release APK
+        env:
+          IDE_SIGNING_KEY_BIN: ${{ secrets.IDE_SIGNING_KEY_BIN }}
+          IDE_SIGNING_ALIAS: ${{ secrets.IDE_SIGNING_ALIAS }}
+          IDE_SIGNING_STORE_PASS: ${{ secrets.IDE_SIGNING_STORE_PASS }}
+          IDE_SIGNING_KEY_PASS: ${{ secrets.IDE_SIGNING_KEY_PASS }}
+        run: ./gradlew :core:app:assembleRelease --stacktrace
+
+      - name: Verify the APK is signed with the release key
+        run: |
+          apk=core/app/build/outputs/apk/release/app-arm64-v8a-release.apk
+          test -f "$apk"
+          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$apk" | head -5
 
       - name: List outputs
         if: ${{ always() }}
         run: find core/app/build/outputs -name '*.apk' -print 2>/dev/null || true
 
-      - name: Upload arm64-v8a debug APK
+      - name: Upload arm64-v8a release APK
         uses: actions/upload-artifact@v4
         with:
-          name: apk-arm64-v8a-debug
-          path: core/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
+          name: apk-arm64-v8a-release
+          path: core/app/build/outputs/apk/release/app-arm64-v8a-release.apk
           if-no-files-found: error

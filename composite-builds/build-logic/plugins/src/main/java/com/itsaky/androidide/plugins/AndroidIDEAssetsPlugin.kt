@@ -20,12 +20,10 @@ package com.itsaky.androidide.plugins
 import com.android.build.api.variant.ApplicationAndroidComponentsExtension
 import com.itsaky.androidide.build.config.BuildConfig
 import com.itsaky.androidide.build.config.downloadVersion
-import com.itsaky.androidide.plugins.tasks.AddAndroidJarToAssetsTask
 import com.itsaky.androidide.plugins.tasks.AddFileToAssetsTask
 import com.itsaky.androidide.plugins.tasks.GenerateInitScriptTask
 import com.itsaky.androidide.plugins.tasks.GradleWrapperGeneratorTask
 import com.itsaky.androidide.plugins.tasks.SetupAapt2Task
-import com.itsaky.androidide.plugins.util.SdkUtils.getAndroidJar
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.configurationcache.extensions.capitalized
@@ -47,11 +45,6 @@ class AndroidIDEAssetsPlugin : Plugin<Project> {
 
       val setupAapt2TaskTaskProvider = tasks.register("setupAapt2", SetupAapt2Task::class.java)
 
-      val addAndroidJarTaskProvider = tasks.register("addAndroidJarToAssets",
-        AddAndroidJarToAssetsTask::class.java) {
-        androidJar = androidComponentsExtension.getAndroidJar(assertExists = true)
-      }
-
       androidComponentsExtension.onVariants { variant ->
 
         val variantNameCapitalized = variant.name.capitalized()
@@ -61,9 +54,6 @@ class AndroidIDEAssetsPlugin : Plugin<Project> {
 
         variant.sources.assets?.addGeneratedSourceDirectory(wrapperGeneratorTaskProvider,
           GradleWrapperGeneratorTask::outputDirectory)
-
-        variant.sources.assets?.addGeneratedSourceDirectory(addAndroidJarTaskProvider,
-          AddAndroidJarToAssetsTask::outputDirectory)
 
         // Init script generator
         val generateInitScript = tasks.register("generate${variantNameCapitalized}InitScript",

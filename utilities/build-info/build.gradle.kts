@@ -78,8 +78,11 @@ tasks.create("generateBuildInfo") {
         "AGP_VERSION_LATEST" to libs.versions.agp.tooling.get(),
         "AGP_VERSION_GRADLE_LATEST" to SdkConstants.GRADLE_LATEST_VERSION,
 
-        "SNAPSHOTS_REPOSITORY" to VersionUtils.SONATYPE_SNAPSHOTS_REPO,
-        "PUBLIC_REPOSITORY" to VersionUtils.SONATYPE_PUBLIC_REPO,
+        // The old Sonatype s01.oss hosts are gone: snapshots returns 404 and groups/public
+        // only redirects to Central. Listing them adds a failed request plus a redirect hop to
+        // EVERY dependency resolution, which is what made project configuration take ~20 min.
+        "SNAPSHOTS_REPOSITORY" to VersionUtils.MAVEN_CENTRAL_SNAPSHOTS_REPO,
+        "PUBLIC_REPOSITORY" to VersionUtils.MAVEN_CENTRAL_REPO,
       )
     )
   }

@@ -78,7 +78,7 @@ public final class Environment {
     BIN_DIR = mkdirIfNotExits(new File(PREFIX, "bin"));
     LIB_DIR = mkdirIfNotExits(new File(PREFIX, "lib"));
     PROJECTS_DIR = mkdirIfNotExits(new File(FileUtil.getExternalStorageDir(), PROJECTS_FOLDER));
-    ANDROID_JAR = mkdirIfNotExits(new File(ANDROIDIDE_HOME, "android.jar"));
+    ANDROID_JAR = new File(ANDROIDIDE_HOME, "android.jar");
     TOOLING_API_JAR = new File(mkdirIfNotExits(new File(ANDROIDIDE_HOME, "tooling-api")),
       "tooling-api-all.jar");
     AAPT2 = new File(ANDROIDIDE_HOME, "aapt2");

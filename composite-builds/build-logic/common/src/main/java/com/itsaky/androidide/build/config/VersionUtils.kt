@@ -30,13 +30,16 @@ object VersionUtils {
 
   /**
    * The Sonatype snapshots repository.
+   *
+   * The old `s01.oss.sonatype.org` host is gone (404). Snapshots now live on Central Portal.
    */
-  const val SONATYPE_SNAPSHOTS_REPO = "https://s01.oss.sonatype.org/content/repositories/snapshots/"
+  const val MAVEN_CENTRAL_SNAPSHOTS_REPO =
+    "https://central.sonatype.com/repository/maven-snapshots/"
 
   /**
-   * The Sonatype release repository.
+   * The release repository. `s01.oss.sonatype.org/content/groups/public` merely redirected here.
    */
-  const val SONATYPE_PUBLIC_REPO = "https://s01.oss.sonatype.org/content/groups/public/"
+  const val MAVEN_CENTRAL_REPO = "https://repo1.maven.org/maven2/"
 
   /**
    * The latest integration version name.
@@ -59,7 +62,7 @@ object VersionUtils {
     }
 
     val groupId = BuildConfig.packageName.replace('.', '/')
-    val moduleMetadata = "$SONATYPE_SNAPSHOTS_REPO/$groupId/${artifact}/maven-metadata.xml"
+    val moduleMetadata = "$MAVEN_CENTRAL_SNAPSHOTS_REPO/$groupId/${artifact}/maven-metadata.xml"
     return try {
        BufferedInputStream(URI.create(moduleMetadata).toURL().openStream()).use { inputStream ->
         val builderFactory = DocumentBuilderFactory.newInstance()

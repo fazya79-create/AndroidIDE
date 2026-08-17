@@ -54,18 +54,6 @@ android {
     generateLocaleConfig = true
   }
 
-  signingConfigs {
-    getByName("debug") {
-      val ciStore = File(System.getProperty("user.home"), ".android/debug.keystore")
-      if (ciStore.exists()) {
-        storeFile = ciStore
-        storePassword = "android"
-        keyAlias = "androiddebugkey"
-        keyPassword = "android"
-      }
-    }
-  }
-
   buildTypes {
     release {
       isShrinkResources = true
@@ -100,7 +88,6 @@ dependencies {
   kapt(libs.google.auto.service)
   kapt(projects.annotation.processors)
 
-  implementation(libs.common.debugoverlay)
   implementation(libs.common.editor)
   implementation(libs.common.utilcode)
   implementation(libs.common.glide)

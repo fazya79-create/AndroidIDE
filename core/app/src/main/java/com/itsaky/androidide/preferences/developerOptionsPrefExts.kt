@@ -42,7 +42,6 @@ internal class DebuggingPreferences(
   init {
     addPreference(DumpLogsPreference())
     addPreference(EnableLogSenderPreference())
-    addPreference(PerfOverlayPreference())
   }
 }
 
@@ -62,10 +61,3 @@ internal class EnableLogSenderPreference(
   SwitchPreference(setValue = DevOpsPreferences::logsenderEnabled::set,
     getValue = DevOpsPreferences::logsenderEnabled::get)
 
-@Parcelize
-internal class PerfOverlayPreference(
-  override val key: String = DevOpsPreferences.KEY_DEVOPTS_DEBUGGING_PERF_OVERLAY,
-  override val title: Int = R.string.idepref_devOptions_perfOverlay_title,
-  override val summary: Int? = R.string.idepref_devOptions_perfOverlay_summary) :
-  SwitchPreference(setValue = DevOpsPreferences::perfOverlayEnabled::set,
-    getValue = DevOpsPreferences::perfOverlayEnabled::get)
