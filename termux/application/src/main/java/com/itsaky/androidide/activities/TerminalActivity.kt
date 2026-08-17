@@ -65,6 +65,9 @@ class TerminalActivity : TermuxActivity() {
 
     const val EXTRA_ONBOARDING_RUN_IDESETUP = "ide.onboarding.terminal.runIdesetup"
     const val EXTRA_ONBOARDING_RUN_IDESETUP_ARGS = "ide.onboarding.terminal.runIdesetup.args"
+
+    /** Shell name of the session that installs the build toolchain. */
+    const val SETUP_SESSION_NAME = "IDE setup"
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -160,7 +163,7 @@ class TerminalActivity : TermuxActivity() {
         /* stdin = */ null,
         /* workingDirectory = */ Environment.HOME.absolutePath,
         /* isFailSafe = */ false,
-        /* sessionName = */ "IDE setup"
+        /* sessionName = */ SETUP_SESSION_NAME
       ) ?: run {
         flashError(R.string.msg_cannot_create_terminal_session)
         return@launch

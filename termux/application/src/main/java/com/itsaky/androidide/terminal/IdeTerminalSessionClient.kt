@@ -34,9 +34,10 @@ class IdeTerminalSessionClient(
   override fun onSessionFinished(finishedSession: TerminalSession) {
     val termuxSession = mActivity?.termuxService?.getTermuxSessionForTerminalSession(
       finishedSession)
-    if (termuxSession != null && termuxSession is IdesetupSession) {
-      // if the finished session was performing tools installation
-      // then set the result code for the installation process
+
+    // if the finished session was performing tools installation
+    // then set the result code for the installation process
+    if (termuxSession?.executionCommand?.shellName == TerminalActivity.SETUP_SESSION_NAME) {
       mActivity.setResult(finishedSession.exitStatus)
     }
 
