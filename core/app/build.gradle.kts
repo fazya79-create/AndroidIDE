@@ -54,6 +54,18 @@ android {
     generateLocaleConfig = true
   }
 
+  signingConfigs {
+    getByName("debug") {
+      val ciStore = File(System.getProperty("user.home"), ".android/debug.keystore")
+      if (ciStore.exists()) {
+        storeFile = ciStore
+        storePassword = "android"
+        keyAlias = "androiddebugkey"
+        keyPassword = "android"
+      }
+    }
+  }
+
   buildTypes {
     release {
       isShrinkResources = true
