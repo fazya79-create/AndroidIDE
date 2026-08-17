@@ -104,6 +104,7 @@ dependencies {
 
   implementation(libs.common.editor)
   implementation(libs.common.utilcode)
+  implementation(libs.common.compress)
   implementation(libs.common.glide)
   implementation(libs.common.jsoup)
   implementation(libs.common.kotlin.coroutines.android)
