@@ -19,6 +19,7 @@ package com.itsaky.androidide.proot
 
 import android.content.Context
 import android.os.Process
+import com.itsaky.androidide.utils.Environment
 import java.io.File
 
 /**
@@ -45,11 +46,11 @@ object ProotConfig {
 
   const val GUEST_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-  /** Guest mount point for the Android SDK, JDK and Gradle. */
-  const val GUEST_OPT = "/opt"
-  const val GUEST_SDK_ROOT = "$GUEST_OPT/android-sdk"
-  const val GUEST_JAVA_HOME = "$GUEST_OPT/jdk"
-  const val GUEST_GRADLE_HOME = "$GUEST_OPT/gradle"
+  /** Guest mount points, declared in [Environment] so `core:common` can use them too. */
+  const val GUEST_OPT = Environment.GUEST_OPT
+  const val GUEST_SDK_ROOT = Environment.GUEST_SDK_ROOT
+  const val GUEST_JAVA_HOME = Environment.GUEST_JAVA_HOME
+  const val GUEST_GRADLE_HOME = Environment.GUEST_GRADLE_HOME
 
   private const val PRIMARY_STORAGE = "/storage/emulated/0"
 

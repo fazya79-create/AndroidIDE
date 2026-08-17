@@ -34,6 +34,12 @@ import java.util.UUID;
 public final class Environment {
 
   public static final String PROJECTS_FOLDER = "AndroidIDEProjects";
+
+  /** Guest mount point of the toolchain inside the Ubuntu rootfs. */
+  public static final String GUEST_OPT = "/opt";
+  public static final String GUEST_SDK_ROOT = GUEST_OPT + "/android-sdk";
+  public static final String GUEST_JAVA_HOME = GUEST_OPT + "/jdk";
+  public static final String GUEST_GRADLE_HOME = GUEST_OPT + "/gradle";
   private static final Logger LOG = LoggerFactory.getLogger(Environment.class);
   public static File ROOT;
   public static File PREFIX;
@@ -119,10 +125,12 @@ public final class Environment {
   public static void putEnvironment(Map<String, String> env, boolean forFailsafe) {
 
     env.put("HOME", HOME.getAbsolutePath());
-    env.put("ANDROID_HOME", ANDROID_HOME.getAbsolutePath());
-    env.put("ANDROID_SDK_ROOT", ANDROID_HOME.getAbsolutePath());
+    // Guest-side paths: the toolchain is bind-mounted at /opt inside the Ubuntu rootfs.
+    // Keep in sync with com.itsaky.androidide.proot.ProotConfig.
+    env.put("ANDROID_HOME", GUEST_SDK_ROOT);
+    env.put("ANDROID_SDK_ROOT", GUEST_SDK_ROOT);
     env.put("ANDROID_USER_HOME", HOME.getAbsolutePath() + "/.android");
-    env.put("JAVA_HOME", JAVA_HOME.getAbsolutePath());
+    env.put("JAVA_HOME", GUEST_JAVA_HOME);
     env.put("GRADLE_USER_HOME", GRADLE_USER_HOME.getAbsolutePath());
     env.put("SYSROOT", PREFIX.getAbsolutePath());
     env.put("PROJECTS", PROJECTS_DIR.getAbsolutePath());

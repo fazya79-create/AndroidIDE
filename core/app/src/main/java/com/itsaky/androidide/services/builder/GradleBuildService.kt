@@ -59,6 +59,7 @@ import com.itsaky.androidide.tooling.api.models.ToolingServerMetadata
 import com.itsaky.androidide.tooling.events.ProgressEvent
 import com.itsaky.androidide.utils.Environment
 import com.itsaky.androidide.proot.ProotConfig
+import com.itsaky.androidide.proot.UbuntuToolchain
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -285,9 +286,13 @@ class GradleBuildService : Service(), BuildService, IToolingApiClient,
     extraArgs.add("--init-script")
     extraArgs.add(Environment.INIT_SCRIPT.absolutePath)
 
-    // Override AAPT2 binary
-    // The one downloaded from Maven is not built for Android
-    extraArgs.add("-Pandroid.aapt2FromMavenOverride=" + Environment.AAPT2.absolutePath)
+    // Override AAPT2 binary. The one from Maven is linux-x86_64 only, and the aapt2 shipped
+    // in the APK is a bionic binary that cannot run inside the glibc Ubuntu rootfs, so point
+    // Gradle at the aarch64 aapt2 that comes with the SDK tools we install.
+    extraArgs.add(
+      "-Pandroid.aapt2FromMavenOverride=" +
+        "${Environment.GUEST_SDK_ROOT}/build-tools/${UbuntuToolchain.BUILD_TOOLS}/aapt2"
+    )
     extraArgs.add("-P${PROPERTY_LOGSENDER_ENABLED}=${DevOpsPreferences.logsenderEnabled}")
     if (BuildPreferences.isStacktraceEnabled) {
       extraArgs.add("--stacktrace")
