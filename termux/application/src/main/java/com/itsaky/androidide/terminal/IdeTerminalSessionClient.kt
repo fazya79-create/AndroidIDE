@@ -40,6 +40,9 @@ class IdeTerminalSessionClient(
     if (termuxSession?.executionCommand?.shellName == TerminalActivity.SETUP_SESSION_NAME) {
       mActivity.setResult(finishedSession.exitStatus)
       if (finishedSession.exitStatus == 0) {
+        // Drop the session from the service too, otherwise it lingers as an idle shell and
+        // keeps the foreground service (and its notification) alive.
+        mActivity.termuxService?.removeTermuxSession(finishedSession)
         mActivity.finishActivityIfNotFinishing()
         return
       }

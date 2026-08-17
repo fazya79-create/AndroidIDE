@@ -17,7 +17,6 @@
 
 package com.itsaky.androidide.plugins.tasks
 
-import com.itsaky.androidide.build.config.VersionUtils
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
@@ -53,18 +52,10 @@ abstract class GenerateInitScriptTask : DefaultTask() {
         """
       initscript {
           repositories {
-              
-              // Always specify the snapshots repository first
-              maven {
-                  // Add snapshots repository for AndroidIDE CI builds
-                  url "${VersionUtils.SONATYPE_SNAPSHOTS_REPO}"
-              }
-              
-              maven {
-                  // Add public repository for AndroidIDE release builds
-                  url "${VersionUtils.SONATYPE_PUBLIC_REPO}"
-              }
-              
+              // The AndroidIDE artifacts are published to Maven Central. The old Sonatype
+              // s01.oss repositories are gone: snapshots 404s and groups/public merely
+              // redirects to Central, so listing them only adds a failed request plus a
+              // redirect hop to every single dependency resolution.
               mavenCentral()
               google()
           }

@@ -100,6 +100,7 @@ dependencies {
   kapt(libs.google.auto.service)
   kapt(projects.annotation.processors)
 
+  implementation(libs.common.debugoverlay)
   implementation(libs.common.editor)
   implementation(libs.common.utilcode)
   implementation(libs.common.glide)

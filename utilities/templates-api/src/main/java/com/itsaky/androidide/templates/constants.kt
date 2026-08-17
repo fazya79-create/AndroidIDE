@@ -22,7 +22,7 @@ package com.itsaky.androidide.templates
  */
 
 const val ANDROID_GRADLE_PLUGIN_VERSION = "8.0.0"
-const val GRADLE_DISTRIBUTION_VERSION = "8.1.1"
+const val GRADLE_DISTRIBUTION_VERSION = "8.8"
 const val KOTLIN_VERSION = "1.8.21"
 
 val TARGET_SDK_VERSION = Sdk.Tiramisu

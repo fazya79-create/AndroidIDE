@@ -17,17 +17,27 @@
 
 package com.itsaky.androidide.services.builder
 
+import com.itsaky.androidide.app.IDEApplication
 import com.itsaky.androidide.preferences.internal.BuildPreferences
+import com.itsaky.androidide.proot.ProotConfig
 import com.itsaky.androidide.tooling.api.messages.GradleDistributionParams
+import java.io.File
 
 /**
  * The distribution params. This considers [gradleInstallationDir] preference as well.
  */
 val gradleDistributionParams: GradleDistributionParams
   get() {
-    if (BuildPreferences.gradleInstallationDir.isBlank()) {
-      return GradleDistributionParams.WRAPPER
+    if (BuildPreferences.gradleInstallationDir.isNotBlank()) {
+      return GradleDistributionParams.forInstallationDir(BuildPreferences.gradleInstallationDir)
     }
 
-    return GradleDistributionParams.forInstallationDir(BuildPreferences.gradleInstallationDir)
+    // Prefer the Gradle installed in the Ubuntu rootfs. Falling back to the wrapper makes the
+    // first build download a second, complete Gradle distribution (~130 MB) even though a
+    // working one is already present.
+    if (File(ProotConfig.gradleDir(IDEApplication.instance), "bin/gradle").isFile) {
+      return GradleDistributionParams.forInstallationDir(ProotConfig.GUEST_GRADLE_HOME)
+    }
+
+    return GradleDistributionParams.WRAPPER
   }
