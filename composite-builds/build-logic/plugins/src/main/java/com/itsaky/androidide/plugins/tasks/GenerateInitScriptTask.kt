@@ -68,6 +68,36 @@ abstract class GenerateInitScriptTask : DefaultTask() {
       }
       
       apply plugin: com.itsaky.androidide.gradle.AndroidIDEInitScriptPlugin
+
+      // The published 'gradle-plugin' artifact has the retired Sonatype hosts compiled into its
+      // BuildInfo, and it injects them as the FIRST repository of every handler. Every POM,
+      // module and JAR then 404s there before resolving elsewhere, which on a phone turned
+      // project configuration into a ~20 minute wait. Strip them after the plugin has run.
+      def deadRepositoryHosts = ['s01.oss.sonatype.org']
+
+      def stripDeadRepositories = { repositories ->
+          try {
+              repositories.removeIf { repository ->
+                  def url = repository.hasProperty('url') ? repository.url : null
+                  url != null && deadRepositoryHosts.any { host -> url.toString().contains(host) }
+              }
+          } catch (Throwable ignored) {
+              // A handler may refuse mutation; a slower build beats a broken one.
+          }
+      }
+
+      gradle.settingsEvaluated { settings ->
+          stripDeadRepositories(settings.dependencyResolutionManagement.repositories)
+          stripDeadRepositories(settings.pluginManagement.repositories)
+      }
+
+      gradle.rootProject { rootProject ->
+          stripDeadRepositories(rootProject.buildscript.repositories)
+          rootProject.allprojects { project ->
+              stripDeadRepositories(project.buildscript.repositories)
+              stripDeadRepositories(project.repositories)
+          }
+      }
     """
           .trimIndent()
       )
