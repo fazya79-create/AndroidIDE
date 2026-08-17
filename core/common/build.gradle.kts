@@ -29,6 +29,7 @@ android {
 
 dependencies {
     api(libs.common.editor)
+    api(libs.common.compress)
     api(libs.common.lang3)
     api(libs.common.utilcode)
     api(libs.google.guava)
