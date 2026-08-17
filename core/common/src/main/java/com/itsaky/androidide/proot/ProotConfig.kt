@@ -106,7 +106,12 @@ object ProotConfig {
 
   fun tarballFile(context: Context): File = File(context.cacheDir, "ubuntu-rootfs.tar.gz")
 
-  fun tmpDir(context: Context): File = File(context.cacheDir, "proot-tmp").apply { mkdirs() }
+  fun tmpDir(context: Context): File = File(context.cacheDir, "proot-tmp").apply {
+    mkdirs()
+    setReadable(true, false)
+    setWritable(true, false)
+    setExecutable(true, false)
+  }
 
   fun prepareMounts(context: Context) {
     val rootfs = rootfsDir(context)
@@ -241,12 +246,22 @@ object ProotConfig {
     binds = binds
   )
 
-  fun prootEnvMap(context: Context): Map<String, String> = mapOf(
-    "TERM" to "xterm-256color",
-    "HOME" to context.filesDir.absolutePath,
-    "PROOT_LOADER" to loaderBinary(context),
-    "PROOT_TMP_DIR" to tmpDir(context).absolutePath
-  )
+  /**
+   * Host-side environment for the proot process. proot has the Termux tmp path compiled in as
+   * its default, which this app cannot write to, so PROOT_TMP_DIR and TMPDIR must both be
+   * overridden or proot fails with "can't create temporary directory: Permission denied".
+   */
+  fun prootEnvMap(context: Context): Map<String, String> {
+    val tmp = tmpDir(context)
+    return mapOf(
+      "TERM" to "xterm-256color",
+      "HOME" to context.filesDir.absolutePath,
+      "TMPDIR" to tmp.absolutePath,
+      "PROOT_LOADER" to loaderBinary(context),
+      "PROOT_TMP_DIR" to tmp.absolutePath,
+      "PROOT_NO_SECCOMP" to "1"
+    )
+  }
 
   fun writeShellProfile(context: Context) {
     val rootfs = rootfsDir(context)

@@ -24,6 +24,8 @@ import android.os.IBinder
 import android.view.View
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.itsaky.androidide.proot.InstallPhase
 import com.itsaky.androidide.proot.ProotConfig
 import com.itsaky.androidide.proot.ToolchainSetup
 import com.itsaky.androidide.terminal.IdeTerminalSessionClient
@@ -39,6 +41,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
+import java.util.HashMap
 
 /**
  * @author Akash Yadav
@@ -88,6 +91,21 @@ class TerminalActivity : TermuxActivity() {
   override fun onDestroy() {
     setupScope.cancel()
     super.onDestroy()
+  }
+
+  private fun describe(phase: InstallPhase): String = when (phase) {
+    is InstallPhase.Idle -> getString(R.string.msg_preparing)
+    is InstallPhase.Downloading -> getString(
+      R.string.msg_downloading_ubuntu,
+      phase.percent,
+      phase.receivedMb.toInt(),
+      phase.totalMb.toInt()
+    )
+
+    is InstallPhase.Extracting -> getString(R.string.msg_extracting_ubuntu, phase.entry)
+    is InstallPhase.Finalizing -> getString(R.string.msg_finalizing_ubuntu)
+    is InstallPhase.Done -> getString(R.string.msg_finalizing_ubuntu)
+    is InstallPhase.Failed -> phase.message
   }
 
   override fun onSaveInstanceState(savedInstanceState: Bundle) {
@@ -144,10 +162,18 @@ class TerminalActivity : TermuxActivity() {
   private fun addIdesetupSession(args: Array<String>) {
     log.debug("Starting Ubuntu toolchain setup, ignored legacy args: {}", args.joinToString(" "))
 
+    val progress = MaterialAlertDialogBuilder(this)
+      .setTitle(R.string.title_installing_ubuntu)
+      .setMessage(R.string.msg_preparing)
+      .setCancelable(false)
+      .show()
+
     setupScope.launch {
       val bootCommand = ToolchainSetup.prepare(this@TerminalActivity) { phase ->
-        log.debug("Ubuntu install phase: {}", phase)
+        setupScope.launch { progress.setMessage(describe(phase)) }
       }
+
+      progress.dismiss()
 
       if (bootCommand == null) {
         flashError(R.string.msg_cannot_create_terminal_session)
@@ -163,7 +189,8 @@ class TerminalActivity : TermuxActivity() {
         /* stdin = */ null,
         /* workingDirectory = */ Environment.HOME.absolutePath,
         /* isFailSafe = */ false,
-        /* sessionName = */ SETUP_SESSION_NAME
+        /* sessionName = */ SETUP_SESSION_NAME,
+        /* additionalEnvironment = */ HashMap(ProotConfig.prootEnvMap(this@TerminalActivity))
       ) ?: run {
         flashError(R.string.msg_cannot_create_terminal_session)
         return@launch

@@ -537,6 +537,11 @@
   <string name="msg_connected_to_metered_connection">Heads up! You\'re on a metered network.</string>
   <string name="msg_disable_background_data_restriction">Disable background data restriction to avoid installation failures.</string>
   <string name="msg_cannot_create_terminal_session">Unable to create terminal session</string>
+  <string name="title_installing_ubuntu">Installing Ubuntu</string>
+  <string name="msg_preparing">Preparing…</string>
+  <string name="msg_downloading_ubuntu">Downloading rootfs %1$d%% (%2$d/%3$d MB)</string>
+  <string name="msg_extracting_ubuntu">Extracting %1$s</string>
+  <string name="msg_finalizing_ubuntu">Configuring rootfs…</string>
   <string name="action_auto_install">Automatic installation</string>
   <string name="action_manual_install">Manual installation</string>
   <string name="hint_android_sdk_version">Android SDK version</string>
