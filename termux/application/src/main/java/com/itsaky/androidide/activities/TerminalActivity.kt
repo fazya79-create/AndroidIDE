@@ -21,18 +21,23 @@ import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
 import android.os.IBinder
-import android.util.Log
 import android.view.View
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import com.itsaky.androidide.proot.ProotConfig
+import com.itsaky.androidide.proot.ToolchainSetup
 import com.itsaky.androidide.terminal.IdeTerminalSessionClient
-import com.itsaky.androidide.terminal.IdesetupSession
 import com.itsaky.androidide.utils.Environment
 import com.itsaky.androidide.utils.flashError
 import com.termux.R
 import com.termux.app.TermuxActivity
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 
 /**
@@ -44,6 +49,8 @@ class TerminalActivity : TermuxActivity() {
     get() = ContextCompat.getColor(this, android.R.color.black)
   override val statusBarColor: Int
     get() = ContextCompat.getColor(this, android.R.color.black)
+
+  private val setupScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
   private var canAddNewSessions = true
     set(value) {
@@ -73,6 +80,11 @@ class TerminalActivity : TermuxActivity() {
 
   override fun onCreateTerminalSessionClient(): TermuxTerminalSessionActivityClient {
     return IdeTerminalSessionClient(this)
+  }
+
+  override fun onDestroy() {
+    setupScope.cancel()
+    super.onDestroy()
   }
 
   override fun onSaveInstanceState(savedInstanceState: Bundle) {
@@ -122,29 +134,39 @@ class TerminalActivity : TermuxActivity() {
     )
   }
 
+  /**
+   * Installs the Ubuntu rootfs (if needed) and starts a session running the toolchain
+   * installer inside it. Replaces the old `idesetup.sh` flow, whose apt repository is dead.
+   */
   private fun addIdesetupSession(args: Array<String>) {
-    val script = IdesetupSession.createScript(this) ?: run {
-      log.error("Failed to add idesetup session. Cannot create script.")
-      flashError(R.string.msg_cannot_create_terminal_session)
-      return
+    log.debug("Starting Ubuntu toolchain setup, ignored legacy args: {}", args.joinToString(" "))
+
+    setupScope.launch {
+      val bootCommand = ToolchainSetup.prepare(this@TerminalActivity) { phase ->
+        log.debug("Ubuntu install phase: {}", phase)
+      }
+
+      if (bootCommand == null) {
+        flashError(R.string.msg_cannot_create_terminal_session)
+        return@launch
+      }
+
+      val session = termuxService.createTermuxSession(
+        /* executablePath = */ ProotConfig.prootBinary(this@TerminalActivity),
+        /* arguments = */ ProotConfig.shellArgs(
+          context = this@TerminalActivity,
+          bootCommand = bootCommand
+        ).drop(1).toTypedArray(),
+        /* stdin = */ null,
+        /* workingDirectory = */ Environment.HOME.absolutePath,
+        /* isFailSafe = */ false,
+        /* sessionName = */ "IDE setup"
+      ) ?: run {
+        flashError(R.string.msg_cannot_create_terminal_session)
+        return@launch
+      }
+
+      termuxTerminalSessionClient.setCurrentSession(session.terminalSession)
     }
-
-    Log.d("IdeSetupConfig", "buildIdeSetupArguments: ${args.joinToString(separator = " ")}")
-
-    val session = IdesetupSession.wrap(termuxService.createTermuxSession(
-      /* executablePath = */ script.absolutePath,
-      /* arguments = */ args,
-      /* stdin = */ null,
-      /* workingDirectory = */ Environment.HOME.absolutePath,
-      /* isFailSafe = */ false,
-      /* sessionName = */ "IDE setup"
-    ), script)
-
-    session ?: run {
-      flashError(R.string.msg_cannot_create_terminal_session)
-      return
-    }
-
-    termuxTerminalSessionClient.setCurrentSession(session.terminalSession)
   }
 }
