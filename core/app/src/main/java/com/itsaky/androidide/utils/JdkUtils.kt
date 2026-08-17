@@ -21,6 +21,7 @@ import androidx.annotation.VisibleForTesting
 import androidx.annotation.WorkerThread
 import com.itsaky.androidide.app.IDEApplication
 import com.itsaky.androidide.models.JdkDistribution
+import com.itsaky.androidide.proot.ProotConfig
 import com.itsaky.androidide.shell.executeProcessAsync
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import org.slf4j.LoggerFactory
@@ -43,10 +44,14 @@ object JdkUtils {
   @WorkerThread
   fun findJavaInstallations(): List<JdkDistribution> {
 
-    // a valid JDK can be installed anywhere in the file system
-    // however, we currently only check for installations that are located in $PREFIX/opt dir
-    // TODO: Find a way to efficiently list all JDK installations, including those which are located
-    //    outside of $PREFIX/opt
+    // The JDK is installed inside the Ubuntu rootfs and exposed on the host filesystem under
+    // <filesDir>/toolchains. Report it directly instead of probing the old Termux $PREFIX/opt.
+    ProotConfig.jdkDir(IDEApplication.instance).let { jdk ->
+      if (File(jdk, "bin/java").isFile) {
+        return listOf(JdkDistribution("17", ProotConfig.GUEST_JAVA_HOME))
+      }
+    }
+
     return try {
       val optDir = File(Environment.PREFIX, "opt")
       if (!optDir.exists() || !optDir.isDirectory) {

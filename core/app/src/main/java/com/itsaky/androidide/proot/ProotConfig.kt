@@ -208,6 +208,25 @@ object ProotConfig {
     return args
   }
 
+  /**
+   * Wraps a JVM invocation so it runs inside the rootfs. The app's `filesDir` is bound at an
+   * identical guest path, so absolute paths to JARs and project caches resolve unchanged.
+   */
+  fun javaArgs(
+    context: Context,
+    jvmArgs: List<String>,
+    guestCwd: String = "/root",
+    binds: List<String> = emptyList()
+  ): List<String> {
+    val files = context.filesDir.absolutePath
+    return exec(
+      context = context,
+      command = listOf("$GUEST_JAVA_HOME/bin/java") + jvmArgs,
+      guestCwd = guestCwd,
+      binds = listOf("$files:$files") + binds
+    )
+  }
+
   /** Run a bash [script] non-interactively. */
   fun execScript(
     context: Context,

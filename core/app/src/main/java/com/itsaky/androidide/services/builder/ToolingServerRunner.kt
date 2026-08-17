@@ -18,6 +18,8 @@
 package com.itsaky.androidide.services.builder
 
 import ch.qos.logback.core.CoreConstants
+import com.itsaky.androidide.app.IDEApplication
+import com.itsaky.androidide.proot.ProotConfig
 import com.itsaky.androidide.shell.executeProcessAsync
 import com.itsaky.androidide.tasks.cancelIfActive
 import com.itsaky.androidide.tasks.ifCancelledOrInterrupted
@@ -73,8 +75,7 @@ internal class ToolingServerRunner(
     var process: Process?
     try {
       log.info("Starting tooling API server...")
-      val command = listOf(
-        Environment.JAVA.absolutePath, // The 'java' binary executable
+      val jvmArgs = listOf(
         // Allow reflective access to private members of classes in the following
         // packages:
         // - java.lang
@@ -94,6 +95,13 @@ internal class ToolingServerRunner(
         "java.base/java.io=ALL-UNNAMED", // The JAR file to run
         "-D${CoreConstants.STATUS_LISTENER_CLASS_KEY}=com.itsaky.androidide.tooling.impl.util.LogbackStatusListener",
         "-jar", Environment.TOOLING_API_JAR.absolutePath
+      )
+
+      // The JDK lives inside the Ubuntu rootfs, so the JVM must be launched through proot.
+      val command = ProotConfig.javaArgs(
+        context = IDEApplication.instance,
+        jvmArgs = jvmArgs,
+        binds = listOf(Environment.PROJECTS_DIR.absolutePath.let { "$it:$it" })
       )
 
       process = executeProcessAsync {

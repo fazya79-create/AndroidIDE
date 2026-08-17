@@ -42,6 +42,7 @@ public final class Environment {
   public static File ANDROIDIDE_UI;
   public static File JAVA_HOME;
   public static File ANDROID_HOME;
+  public static File TOOLCHAINS_DIR;
   public static File TMP_DIR;
   public static File BIN_DIR;
   public static File LIB_DIR;
@@ -81,8 +82,11 @@ public final class Environment {
     INIT_SCRIPT = new File(mkdirIfNotExits(new File(ANDROIDIDE_HOME, "init")), "init.gradle");
     GRADLE_USER_HOME = new File(HOME, ".gradle");
 
-    ANDROID_HOME = new File(HOME, "android-sdk");
-    JAVA_HOME = new File(PREFIX, "opt/openjdk");
+    // The build toolchain lives outside the Ubuntu rootfs so reinstalling Ubuntu never wipes it.
+    // Keep these paths in sync with com.itsaky.androidide.proot.ProotConfig.
+    TOOLCHAINS_DIR = mkdirIfNotExits(new File(ROOT, "toolchains"));
+    ANDROID_HOME = new File(TOOLCHAINS_DIR, "android-sdk");
+    JAVA_HOME = new File(TOOLCHAINS_DIR, "jdk");
 
     JAVA = new File(JAVA_HOME, "bin/java");
     BASH_SHELL = new File(BIN_DIR, "bash");

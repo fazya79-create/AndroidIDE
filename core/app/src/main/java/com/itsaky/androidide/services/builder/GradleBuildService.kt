@@ -58,6 +58,7 @@ import com.itsaky.androidide.tooling.api.messages.result.TaskExecutionResult
 import com.itsaky.androidide.tooling.api.models.ToolingServerMetadata
 import com.itsaky.androidide.tooling.events.ProgressEvent
 import com.itsaky.androidide.utils.Environment
+import com.itsaky.androidide.proot.ProotConfig
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -428,7 +429,9 @@ class GradleBuildService : Service(), BuildService, IToolingApiClient,
 
   internal fun startToolingServer(listener: OnServerStartListener?) {
     if (toolingServerRunner?.isStarted != true) {
-      val envs = TermuxShellEnvironment().getEnvironment(this, false)
+      // proot needs PROOT_LOADER and PROOT_TMP_DIR on the host environment, not the guest one.
+      val envs = TermuxShellEnvironment().getEnvironment(this, false) +
+        ProotConfig.prootEnvMap(this)
       toolingServerRunner = ToolingServerRunner(listener, this).also { it.startAsync(envs) }
       return
     }
