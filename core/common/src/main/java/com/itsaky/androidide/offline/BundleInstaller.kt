@@ -41,6 +41,7 @@ sealed class BundlePhase {
   ) : BundlePhase()
 
   data class Extracting(val entry: String, val count: Int) : BundlePhase()
+  data class Component(val name: String, val index: Int, val total: Int) : BundlePhase()
   data object Done : BundlePhase()
   data class Failed(val message: String) : BundlePhase()
 }
@@ -68,24 +69,51 @@ class BundleInstaller(private val context: Context) {
     private const val BUFFER_SIZE = 64 * 1024
     private const val MARKER_NAME = ".installed"
 
-    /** Whether every bundle entry is present for the current [OfflineBundle.VERSION]. */
-    fun isInstalled(context: Context): Boolean = OfflineBundle.entries.all { entry ->
+    /** SDK/build-tools binaries that do not live in a `bin` directory. */
+    private val EXECUTABLES = setOf(
+      "aapt", "aapt2", "adb", "aidl", "apksigner", "bcc_compat", "core-lambda-stubs.jar",
+      "d8", "dexdump", "dx", "etc1tool", "fastboot", "lld", "llvm-rs-cc", "mainDexClasses",
+      "split-select", "sqlite3", "zipalign", "java", "javac", "jar", "keytool", "gradle"
+    )
+
+    /** Whether every bundle entry is present at the tag it is currently published under. */
+    fun isInstalled(context: Context): Boolean =
+      OfflineBundle.entries.all { isInstalled(context, it) }
+
+    private fun isInstalled(context: Context, entry: OfflineBundle.Entry): Boolean {
       val dest = File(context.filesDir, entry.destination)
-      File(dest, MARKER_NAME).takeIf { it.isFile }?.readText()?.trim() == OfflineBundle.VERSION
+      return File(dest, MARKER_NAME).takeIf { it.isFile }?.readText()?.trim() == entry.tag
     }
 
     fun repositoryDir(context: Context): File =
       File(context.filesDir, OfflineBundle.REPOSITORY_PATH)
+
+    /** Parent of the extracted JDK, Android SDK and Gradle, bound into the rootfs at `/opt`. */
+    fun toolchainDir(context: Context): File =
+      File(context.filesDir, OfflineBundle.TOOLCHAIN_PATH)
   }
 
   suspend fun install(onProgress: (BundlePhase) -> Unit): Boolean = withContext(Dispatchers.IO) {
     try {
-      val checksums = fetchChecksums()
-      for (entry in OfflineBundle.entries) {
-        if (isEntryInstalled(entry)) continue
-        val staged = download(entry, checksums[entry.fileName], onProgress)
-        extract(entry, staged, onProgress)
-        staged.delete()
+      // One manifest per release tag; fetched once each instead of per entry.
+      val checksums = OfflineBundle.entries
+        .map { it.checksumsUrl }
+        .distinct()
+        .fold(emptyMap<String, String>()) { acc, url -> acc + fetchChecksums(url) }
+
+      OfflineBundle.entries.forEachIndexed { index, entry ->
+        if (!isEntryInstalled(entry)) {
+          onProgress(
+            BundlePhase.Component(
+              name = entry.fileName.removeSuffix(".br").removeSuffix(".zip"),
+              index = index + 1,
+              total = OfflineBundle.entries.size
+            )
+          )
+          val staged = download(entry, checksums[entry.fileName], onProgress)
+          extract(entry, staged, onProgress)
+          staged.delete()
+        }
       }
       onProgress(BundlePhase.Done)
       true
@@ -99,18 +127,15 @@ class BundleInstaller(private val context: Context) {
     }
   }
 
-  private fun isEntryInstalled(entry: OfflineBundle.Entry): Boolean {
-    val dest = File(context.filesDir, entry.destination)
-    return File(dest, MARKER_NAME).takeIf { it.isFile }
-      ?.readText()?.trim() == OfflineBundle.VERSION
-  }
+  private fun isEntryInstalled(entry: OfflineBundle.Entry): Boolean =
+    isInstalled(context, entry)
 
   /**
    * Reads the published `checksums.txt` (`<sha256>  <filename>` per line). A missing manifest is
    * not fatal — verification is skipped rather than blocking the install.
    */
-  private fun fetchChecksums(): Map<String, String> = runCatching {
-    openRangedConnection(URL(OfflineBundle.checksumsUrl), 0L).let { connection ->
+  private fun fetchChecksums(url: String): Map<String, String> = runCatching {
+    openRangedConnection(URL(url), 0L).let { connection ->
       try {
         connection.inputStream.bufferedReader().useLines { lines ->
           lines.mapNotNull { line ->
@@ -270,7 +295,27 @@ class BundleInstaller(private val context: Context) {
       throw IllegalStateException("Bundle archive was empty")
     }
 
-    File(dest, MARKER_NAME).writeText(OfflineBundle.VERSION)
+    restoreExecutableBits(dest)
+    File(dest, MARKER_NAME).writeText(entry.tag)
+  }
+
+  /**
+   * `ZipInputStream` drops POSIX permissions, so every extracted binary comes out non-executable
+   * and the toolchain silently fails with "permission denied". Restoring the bit on `bin`
+   * directories and on known SDK executables is enough — nothing else needs to be runnable.
+   */
+  private fun restoreExecutableBits(root: File) {
+    root.walkTopDown().forEach { file ->
+      if (!file.isFile) return@forEach
+      val parent = file.parentFile?.name
+      val runnable = parent == "bin" ||
+          parent == "jre" ||
+          file.name.endsWith(".so") ||
+          file.name in EXECUTABLES
+      if (runnable) {
+        file.setExecutable(true, false)
+      }
+    }
   }
 
   private fun openArchive(entry: OfflineBundle.Entry, archive: File): InputStream {

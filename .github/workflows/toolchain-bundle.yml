@@ -90,22 +90,36 @@ jobs:
         run: |
           curl -fsSL -o gradle.zip \
             "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
-          mkdir -p stage/gradle-tmp
-          unzip -q gradle.zip -d stage/gradle-tmp
-          mv "stage/gradle-tmp/gradle-${GRADLE_VERSION}" stage/gradle
-          rmdir stage/gradle-tmp
+          # Unpack outside stage/, then move the single versioned directory in. Unzipping straight
+          # into stage/ left both gradle-<version>/ and its contents at the top level, doubling
+          # the archive to 276 MB.
+          rm -rf gradle-unpack
+          mkdir -p gradle-unpack
+          unzip -q gradle.zip -d gradle-unpack
+          rm -rf stage/gradle
+          mkdir -p stage
+          mv "gradle-unpack/gradle-${GRADLE_VERSION}" stage/gradle
+          rm -rf gradle-unpack
           test -x stage/gradle/bin/gradle
+          test ! -e stage/gradle/gradle-${GRADLE_VERSION}
           du -sh stage/gradle
 
       - name: Drop what is only needed to install the SDK
         run: |
-          # cmdline-tools/lib is ~157 MB of sdkmanager/lint JARs. The platform is already staged
-          # above, so nothing on device needs to run sdkmanager again.
+          # cmdline-tools/lib is 157 MB of sdkmanager/lint JARs — the single biggest item in the
+          # SDK. The platform is already staged above, so nothing on device runs sdkmanager again.
+          # This tarball has no version directory (cmdline-tools/lib, not cmdline-tools/*/lib),
+          # which is why the earlier glob pruned nothing at all.
           before=$(du -sm stage/android-sdk | cut -f1)
-          rm -rf stage/android-sdk/cmdline-tools/*/lib
-          rm -rf stage/android-sdk/emulator stage/android-sdk/system-images
+          rm -rf stage/android-sdk/cmdline-tools
+          rm -rf stage/android-sdk/emulator stage/android-sdk/system-images stage/android-sdk/.temp
           after=$(du -sm stage/android-sdk | cut -f1)
           echo "android-sdk: ${before} MB -> ${after} MB"
+          test ! -d stage/android-sdk/cmdline-tools
+          # What a build actually needs must survive the prune.
+          test -d "stage/android-sdk/platforms/android-${PLATFORM}"
+          test -d "stage/android-sdk/build-tools/${BUILD_TOOLS}"
+          test -d stage/android-sdk/platform-tools
 
       - name: Archive each component with stored entries
         run: |
