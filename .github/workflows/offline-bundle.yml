@@ -18,6 +18,8 @@ permissions:
   contents: write
 
 env:
+  # Must match the version baked into the APK's init script (see ProjectConfig.downloadVersion).
+  IDE_PLUGIN_VERSION: '2.7.1-beta'
   AGP_VERSION: '8.11.0'
   GRADLE_VERSION: '8.14.3'
   KOTLIN_VERSION: '1.9.22'
@@ -203,6 +205,29 @@ jobs:
           "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home" assembleDebug assembleRelease
           "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home" lintDebug || true
           "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home" compileDebugAndroidTestKotlin || true
+
+      - name: Harvest the IDE's own init-script classpath
+        working-directory: probe
+        run: |
+          GRADLE="$PWD/gradle-${GRADLE_VERSION}/bin/gradle"
+
+          # The on-device init script pulls in AndroidIDE's gradle-plugin before any project code
+          # runs. Resolving it here is what stops an offline build failing with
+          # "No cached version of com.itsaky.androidide:gradle-plugin available for offline mode".
+          cat > harvest-init.gradle.kts <<EOF
+          initscript {
+              repositories {
+                  mavenCentral()
+                  google()
+              }
+              dependencies {
+                  classpath("com.itsaky.androidide:gradle-plugin:${IDE_PLUGIN_VERSION}")
+              }
+          }
+          EOF
+
+          "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home" \
+            --init-script harvest-init.gradle.kts help
 
       - name: Convert the module cache into a Maven repository layout
         run: |

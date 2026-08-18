@@ -52,6 +52,17 @@ abstract class GenerateInitScriptTask : DefaultTask() {
         """
       initscript {
           repositories {
+              // The offline bundle must be listed here too, not just added later: this
+              // `initscript` block resolves BEFORE any of the hooks below run, so an offline
+              // build fails on the plugin's own classpath unless the repository is present now.
+              def offlinePath = System.getenv('ANDROIDIDE_OFFLINE_REPO')
+              if (offlinePath) {
+                  def offlineDir = new File(offlinePath)
+                  if (offlineDir.isDirectory()) {
+                      maven { it.url = offlineDir.toURI() }
+                  }
+              }
+
               // The AndroidIDE artifacts are published to Maven Central. The old Sonatype
               // s01.oss repositories are gone: snapshots 404s and groups/public merely
               // redirects to Central, so listing them only adds a failed request plus a
