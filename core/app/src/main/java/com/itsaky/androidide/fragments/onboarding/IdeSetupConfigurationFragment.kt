@@ -39,6 +39,7 @@ import com.itsaky.androidide.R
 import com.itsaky.androidide.databinding.LayoutOnboardngSetupConfigBinding
 import com.itsaky.androidide.offline.BundleInstaller
 import com.itsaky.androidide.offline.BundlePhase
+import com.itsaky.androidide.offline.OfflineBundle
 import com.itsaky.androidide.resources.R.string
 import com.itsaky.androidide.tasks.runOnUiThread
 import com.itsaky.androidide.utils.ConnectionInfo
@@ -140,6 +141,16 @@ class IdeSetupConfigurationFragment : OnboardingFragment(), SlidePolicy {
     when (phase) {
       is BundlePhase.Idle -> Unit
 
+      is BundlePhase.Component -> content.apply {
+        bundleProgress.isIndeterminate = true
+        bundleStatus.text = getString(
+          R.string.msg_bundle_component,
+          phase.name,
+          phase.index,
+          phase.total
+        )
+      }
+
       is BundlePhase.Downloading -> content.apply {
         bundleProgress.isIndeterminate = false
         bundleProgress.progress = phase.percent
@@ -173,7 +184,10 @@ class IdeSetupConfigurationFragment : OnboardingFragment(), SlidePolicy {
       if (installed) {
         bundleStatus.setText(R.string.msg_bundle_ready)
       } else if (installJob?.isActive != true) {
-        bundleStatus.setText(R.string.msg_bundle_required)
+        bundleStatus.text = getString(
+          R.string.msg_bundle_download_size,
+          OfflineBundle.totalSizeMb
+        )
         downloadAction.setText(R.string.action_download_bundle)
       }
     }

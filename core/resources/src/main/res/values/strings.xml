@@ -567,4 +567,6 @@
   <string name="idepref_offlineBundle_summary">Prebuilt Maven repository used for offline builds</string>
   <string name="msg_bundle_reinstall">The bundle is already installed. Download it again?</string>
   <string name="msg_bundle_failed">Could not install the dependency bundle.</string>
+  <string name="msg_bundle_component">%1$s (%2$d/%3$d)</string>
+  <string name="msg_bundle_download_size">Download the build components (%1$d MB). This happens once; every project then builds without a network connection.</string>
 </resources>
