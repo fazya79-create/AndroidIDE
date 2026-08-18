@@ -19,6 +19,7 @@ package com.itsaky.androidide.templates.base.modules.android
 
 import com.itsaky.androidide.templates.Language.Kotlin
 import com.itsaky.androidide.templates.ModuleType
+import com.itsaky.androidide.templates.NativeBuildSystem
 import com.itsaky.androidide.templates.base.AndroidModuleTemplateBuilder
 import com.itsaky.androidide.templates.base.ModuleTemplateBuilder
 import com.itsaky.androidide.templates.base.modules.dependencies
@@ -84,6 +85,7 @@ android {
         ${if (isComposeModule) "compose = true" else ""}
     }
     ${if(isComposeModule) composeConfigKts() else ""}
+    ${nativeBuildKts()}
 }
 ${ktJvmTarget()}
 ${dependencies()}
@@ -132,10 +134,57 @@ android {
         ${if (isComposeModule) "compose true" else ""}
     }
     ${if(isComposeModule) composeConfigGroovy() else ""}
+    ${nativeBuildGroovy()}
 }
 ${ktJvmTarget()}
 ${dependencies()}
 """
+}
+
+/**
+ * The `externalNativeBuild` block, or an empty string for a module without native sources.
+ *
+ * `ndkVersion` is intentionally omitted so AGP falls back to the highest installed NDK; pinning a
+ * revision here would break the project on a device that has a different one.
+ */
+private fun AndroidModuleTemplateBuilder.nativeBuildKts(): String = when (nativeBuildSystem) {
+  NativeBuildSystem.CMake -> """
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+        }
+    }
+""".trim()
+
+  NativeBuildSystem.NdkBuild -> """
+    externalNativeBuild {
+        ndkBuild {
+            path = file("src/main/cpp/Android.mk")
+        }
+    }
+""".trim()
+
+  null -> ""
+}
+
+private fun AndroidModuleTemplateBuilder.nativeBuildGroovy(): String = when (nativeBuildSystem) {
+  NativeBuildSystem.CMake -> """
+    externalNativeBuild {
+        cmake {
+            path file('src/main/cpp/CMakeLists.txt')
+        }
+    }
+""".trim()
+
+  NativeBuildSystem.NdkBuild -> """
+    externalNativeBuild {
+        ndkBuild {
+            path file('src/main/cpp/Android.mk')
+        }
+    }
+""".trim()
+
+  null -> ""
 }
 
 fun composeConfigGroovy(): String

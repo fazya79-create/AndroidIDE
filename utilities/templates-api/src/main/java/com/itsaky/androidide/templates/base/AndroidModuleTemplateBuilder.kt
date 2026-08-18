@@ -20,6 +20,7 @@ package com.itsaky.androidide.templates.base
 import com.android.SdkConstants.ANDROID_MANIFEST_XML
 import com.itsaky.androidide.templates.ModuleType.AndroidLibrary
 import com.itsaky.androidide.templates.RecipeExecutor
+import com.itsaky.androidide.templates.NativeBuildSystem
 import com.itsaky.androidide.templates.SrcSet
 import com.itsaky.androidide.templates.base.modules.android.androidGitignoreSrc
 import com.itsaky.androidide.templates.base.modules.android.buildGradleSrc
@@ -39,6 +40,16 @@ class AndroidModuleTemplateBuilder : ModuleTemplateBuilder() {
    * added to the `build.gradle[.kts]` file.
    */
   var isComposeModule = false
+
+  /**
+   * The build system used to compile the module's C/C++ sources, or `null` for a module with no
+   * native code.
+   *
+   * When set, an `externalNativeBuild` block is added to `build.gradle[.kts]`. The NDK version is
+   * deliberately left out: AGP then picks the highest installed one, so the generated project
+   * builds on any device instead of pinning a revision that may not be present.
+   */
+  var nativeBuildSystem: NativeBuildSystem? = null
 
   val manifest = AndroidManifestBuilder()
   val res = AndroidModuleResManager()
