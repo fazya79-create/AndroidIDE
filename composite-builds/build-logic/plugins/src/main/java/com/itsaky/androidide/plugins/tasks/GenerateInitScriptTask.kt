@@ -55,12 +55,13 @@ abstract class GenerateInitScriptTask : DefaultTask() {
               // The offline bundle must be listed here too, not just added later: this
               // `initscript` block resolves BEFORE any of the hooks below run, so an offline
               // build fails on the plugin's own classpath unless the repository is present now.
-              def offlinePath = System.getenv('ANDROIDIDE_OFFLINE_REPO')
-              if (offlinePath) {
-                  def offlineDir = new File(offlinePath)
-                  if (offlineDir.isDirectory()) {
-                      maven { it.url = offlineDir.toURI() }
-                  }
+              //
+              // The path is substituted by ToolsManager when the script is written. Reading it
+              // from the environment does not work: the script is evaluated by the Gradle daemon,
+              // which may have been started earlier with a different environment.
+              def offlineDir = new File('${'$'}OFFLINE_REPO_PLACEHOLDER')
+              if (offlineDir.isDirectory()) {
+                  maven { it.url = offlineDir.toURI() }
               }
 
               // The AndroidIDE artifacts are published to Maven Central. The old Sonatype
@@ -82,8 +83,11 @@ abstract class GenerateInitScriptTask : DefaultTask() {
 
       // The offline bundle: a Maven repository harvested from a real resolution of the project
       // template. Added to every handler so a `--offline` build resolves entirely from disk.
-      def offlineRepositoryPath = System.getenv('ANDROIDIDE_OFFLINE_REPO')
-      def offlineRepository = offlineRepositoryPath ? new File(offlineRepositoryPath) : null
+      //
+      // The path is substituted again here: `def` inside the `initscript` closure above is local
+      // to that closure, so the variable is not visible at script scope.
+      def offlineRepositoryDir = new File('${'$'}OFFLINE_REPO_PLACEHOLDER')
+      def offlineRepository = offlineRepositoryDir.isDirectory() ? offlineRepositoryDir : null
 
       def addOfflineRepository = { repositories ->
           if (offlineRepository == null || !offlineRepository.isDirectory()) {

@@ -50,6 +50,12 @@ public class ToolsManager {
 
   public static String COMMON_ASSET_DATA_DIR = "data/common";
 
+  /**
+   * Substituted with the absolute path of the harvested offline Maven repository when the init
+   * script is written. Must match the placeholder emitted by {@code GenerateInitScriptTask}.
+   */
+  private static final String OFFLINE_REPO_PLACEHOLDER = "$OFFLINE_REPO_PLACEHOLDER";
+
   public static void init(@NonNull BaseApplication app, Runnable onFinish) {
 
     if (!IDEBuildConfigProvider.getInstance().supportsCpuAbi()) {
@@ -252,20 +258,28 @@ public class ToolsManager {
         Environment.TOOLING_API_JAR.getAbsolutePath());
   }
 
+  /**
+   * Writes the bundled init script, overwriting any copy from a previous install.
+   *
+   * The script must be refreshed on every launch: it is versioned with the APK, so keeping a stale
+   * copy silently pins the IDE to the old repository setup. That is how an offline build kept
+   * failing to resolve the IDE's own Gradle plugin even after the fix shipped.
+   */
   private static void writeInitScript() {
     final var initScript = Environment.INIT_SCRIPT;
     final var initScriptBak = new File(initScript.getParentFile(), initScript.getName() + ".bak");
     final var contents = readInitScript();
 
     FilesKt.writeText(initScriptBak, contents, StandardCharsets.UTF_8);
-    if (!initScript.exists()) {
-      FilesKt.writeText(initScript, contents, StandardCharsets.UTF_8);
-    }
+    FilesKt.writeText(initScript, contents, StandardCharsets.UTF_8);
   }
 
   @NonNull
   private static String readInitScript() {
-    return ResourceUtils.readAssets2String(getCommonAsset("androidide.init.gradle"));
+    final var contents = ResourceUtils.readAssets2String(getCommonAsset("androidide.init.gradle"));
+    final var offlineRepo = new File(BaseApplication.getBaseInstance().getFilesDir(),
+        "home/maven/localMvnRepository");
+    return contents.replace(OFFLINE_REPO_PLACEHOLDER, offlineRepo.getAbsolutePath());
   }
 
 }
