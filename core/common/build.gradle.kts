@@ -30,6 +30,7 @@ android {
 dependencies {
     api(libs.common.editor)
     api(libs.common.compress)
+    api(libs.common.xz)
     api(libs.common.kotlin.coroutines.android)
     api(libs.common.lang3)
     api(libs.common.utilcode)

@@ -18,11 +18,14 @@
 package com.itsaky.androidide.preferences
 
 import android.content.Context
+import android.content.Intent
 import androidx.preference.Preference
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputLayout
 import com.itsaky.androidide.R
+import com.itsaky.androidide.activities.SdkManagerActivity
 import com.itsaky.androidide.app.configuration.IJdkDistributionProvider
+import com.itsaky.androidide.ndk.NativeComponents
 import com.itsaky.androidide.models.JdkDistribution
 import com.itsaky.androidide.preferences.internal.BuildPreferences.CUSTOM_GRADLE_INSTALLATION
 import com.itsaky.androidide.preferences.internal.BuildPreferences.GRADLE_CLEAR_CACHE
@@ -59,7 +62,58 @@ class BuildAndRunPreferences(
 
   init {
     addPreference(GradleOptions())
+    addPreference(NativeOptions())
     addPreference(RunOptions())
+  }
+}
+
+@Parcelize
+private class NativeOptions(
+  override val key: String = "idepref_build_native",
+  override val title: Int = string.idepref_native_title,
+  override val children: List<IPreference> = mutableListOf(),
+) : IPreferenceGroup() {
+
+  init {
+    addPreference(SdkManagerPreference())
+  }
+}
+
+/**
+ * Opens the SDK Manager, where the NDK and CMake builds for native projects are installed.
+ *
+ * The summary reports what is currently installed, so the state is visible without opening it.
+ */
+@Parcelize
+private class SdkManagerPreference(
+  override val key: String = "idepref_build_sdkManager",
+  override val title: Int = string.title_sdk_manager,
+  override val icon: Int? = drawable.ic_android,
+) : SimpleClickablePreference() {
+
+  override fun onCreatePreference(context: Context): Preference {
+    return super.onCreatePreference(context).also { updateSummary(it) }
+  }
+
+  override fun onPreferenceClick(preference: Preference): Boolean {
+    preference.context.startActivity(
+      Intent(preference.context, SdkManagerActivity::class.java)
+    )
+    return true
+  }
+
+  private fun updateSummary(preference: Preference) {
+    val context = preference.context
+    val ndk = NativeComponents.installedNdks(context).firstOrNull()
+    val cmake = NativeComponents.installedCMakes(context).firstOrNull()
+
+    preference.summary = when {
+      ndk != null && cmake != null ->
+        context.getString(string.msg_sdk_manager_summary, ndk, cmake)
+
+      ndk != null -> context.getString(string.msg_sdk_manager_summary_ndk_only, ndk)
+      else -> context.getString(string.msg_sdk_manager_summary_empty)
+    }
   }
 }
 

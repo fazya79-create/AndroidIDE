@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  ~  This file is part of AndroidIDE.
+  ~
+  ~  AndroidIDE is free software: you can redistribute it and/or modify
+  ~  it under the terms of the GNU General Public License as published by
+  ~  the Free Software Foundation, either version 3 of the License, or
+  ~  (at your option) any later version.
+  ~
+  ~  AndroidIDE is distributed in the hope that it will be useful,
+  ~  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ~  GNU General Public License for more details.
+  ~
+  ~  You should have received a copy of the GNU General Public License
+  ~   along with AndroidIDE.  If not, see <https://www.gnu.org/licenses/>.
+  -->
+
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+  xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:app="http://schemas.android.com/apk/res-auto"
+  xmlns:tools="http://schemas.android.com/tools"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:animateLayoutChanges="true">
+
+  <androidx.core.widget.NestedScrollView
+    android:id="@+id/scroll_view"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    app:layout_behavior="com.google.android.material.appbar.AppBarLayout$ScrollingViewBehavior">
+
+    <LinearLayout
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="vertical"
+      android:paddingHorizontal="20dp"
+      android:paddingTop="20dp"
+      android:paddingBottom="24dp">
+
+      <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="20dp"
+        android:text="@string/msg_sdk_manager_native"
+        android:textAppearance="?attr/textAppearanceBodyMedium"
+        android:textColor="?attr/colorOnSurfaceVariant" />
+
+      <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/ndkVersionLayout"
+        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="@string/hint_ndk_version">
+
+        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+          android:id="@+id/ndkVersion"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:inputType="none"
+          tools:ignore="LabelFor" />
+
+      </com.google.android.material.textfield.TextInputLayout>
+
+      <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:id="@+id/ndkProgress"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:visibility="gone"
+        app:trackCornerRadius="4dp"
+        tools:visibility="visible" />
+
+      <TextView
+        android:id="@+id/ndkStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textAppearance="?attr/textAppearanceLabelMedium"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        tools:text="Installed" />
+
+      <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/cmakeVersionLayout"
+        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:hint="@string/hint_cmake_version">
+
+        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+          android:id="@+id/cmakeVersion"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:inputType="none"
+          tools:ignore="LabelFor" />
+
+      </com.google.android.material.textfield.TextInputLayout>
+
+      <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:id="@+id/cmakeProgress"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:visibility="gone"
+        app:trackCornerRadius="4dp" />
+
+      <TextView
+        android:id="@+id/cmakeStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textAppearance="?attr/textAppearanceLabelMedium"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        tools:text="Not installed" />
+
+      <com.google.android.material.button.MaterialButton
+        android:id="@+id/downloadAction"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:text="@string/action_download_native" />
+
+    </LinearLayout>
+
+  </androidx.core.widget.NestedScrollView>
+
+  <com.google.android.material.appbar.AppBarLayout
+    android:id="@+id/appbar"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:elevation="8dp"
+    android:fitsSystemWindows="true"
+    app:elevation="8dp"
+    app:layout_behavior="com.google.android.material.appbar.AppBarLayout$Behavior">
+
+    <com.google.android.material.appbar.MaterialToolbar
+      android:id="@+id/toolbar"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content" />
+
+  </com.google.android.material.appbar.AppBarLayout>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
