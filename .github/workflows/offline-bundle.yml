@@ -12,7 +12,7 @@ on:
       tag:
         description: 'Release tag to publish the bundle under'
         required: true
-        default: 'offline-bundle-v4'
+        default: 'offline-bundle-v5'
 
 permissions:
   contents: write
@@ -210,10 +210,28 @@ jobs:
           }
           EOF
 
-          "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home" resolveEverything
-          "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home" assembleDebug assembleRelease
-          "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home" lintDebug || true
-          "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home" compileDebugAndroidTestKotlin || true
+          # Apply the IDE's init-script plugin here too: it injects logsender into every variant,
+          # so resolving without it harvests a dependency set the device will never have.
+          cat > harvest-ide-init.gradle <<EOF
+          initscript {
+              repositories {
+                  mavenCentral()
+                  google()
+              }
+              dependencies {
+                  classpath 'com.itsaky.androidide:gradle-plugin:${IDE_PLUGIN_VERSION}'
+              }
+          }
+
+          apply plugin: com.itsaky.androidide.gradle.AndroidIDEInitScriptPlugin
+          EOF
+
+          IDE_INIT=(--init-script harvest-ide-init.gradle -Pandroidide.logsender.isEnabled=true)
+
+          "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home" "${IDE_INIT[@]}" resolveEverything
+          "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home" "${IDE_INIT[@]}" assembleDebug assembleRelease
+          "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home" "${IDE_INIT[@]}" lintDebug || true
+          "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home" "${IDE_INIT[@]}" compileDebugAndroidTestKotlin || true
 
       - name: Harvest the IDE's own init-script classpath
         working-directory: probe
@@ -270,6 +288,11 @@ jobs:
               (CENTRAL, "com/itsaky/androidide", "gradle-plugin", ide),
               (CENTRAL, "com/itsaky/androidide", "gradle-plugin-config", ide),
               (CENTRAL, "com/itsaky/androidide", "build-info", ide),
+              # The init-script plugin injects logsender into every generated project
+              # ("Adding LogSender dependency ... to variant 'debug'"), so an offline build needs it
+              # and its `logger` dependency even though no template declares them.
+              (CENTRAL, "com/itsaky/androidide", "logsender", ide),
+              (CENTRAL, "com/itsaky/androidide", "logger", ide),
               (GOOGLE, "com/android/tools/build", "gradle", agp),
               (GOOGLE, "com/android/tools/build", "gradle-api", agp),
               (CENTRAL, "org/jetbrains/kotlin", "kotlin-gradle-plugin", kotlin),
@@ -403,8 +426,9 @@ jobs:
           REPO="$PWD/../localMvnRepository"
 
           # The real test of "nothing was missed": build offline against the harvested repository
-          # only, with the IDE's init script in the way exactly as on device. A missing artifact
-          # fails here instead of on the user's phone.
+          # only, with the IDE's init script APPLIED exactly as on device. Merely putting the plugin
+          # on the classpath is not enough — applying it is what injects logsender into every
+          # variant, and that missing artifact is precisely what slipped through before.
           cat > verify-init.gradle <<EOF
           initscript {
               repositories {
@@ -414,6 +438,8 @@ jobs:
                   classpath 'com.itsaky.androidide:gradle-plugin:${IDE_PLUGIN_VERSION}'
               }
           }
+
+          apply plugin: com.itsaky.androidide.gradle.AndroidIDEInitScriptPlugin
 
           settingsEvaluated { settings ->
               settings.pluginManagement.repositories.clear()
@@ -431,9 +457,12 @@ jobs:
           EOF
 
           rm -rf gradle-home-verify
+          # The same properties the IDE passes on device, so the same code paths run here.
           "$GRADLE" --no-daemon --offline \
             --gradle-user-home "$PWD/gradle-home-verify" \
             --init-script verify-init.gradle \
+            -Pandroidide.logsender.isEnabled=true \
+            -Pandroid.aapt2FromMavenOverride="$ANDROID_HOME/build-tools/${BUILD_TOOLS_VERSION}/aapt2" \
             assembleDebug assembleRelease
 
       - name: Zip the repository with stored (uncompressed) entries

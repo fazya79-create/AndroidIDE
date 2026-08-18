@@ -33,7 +33,7 @@ package com.itsaky.androidide.offline
 object OfflineBundle {
 
   /** Release tag holding the dependency repository. Bump together with the harvested contents. */
-  const val VERSION = "offline-bundle-v4"
+  const val VERSION = "offline-bundle-v5"
 
   /** Release tag holding the JDK, Android SDK and Gradle archives. */
   const val TOOLCHAIN_VERSION = "toolchain-v3"
