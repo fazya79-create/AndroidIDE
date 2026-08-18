@@ -40,17 +40,22 @@ data class Dependency(val configuration: DependencyConfiguration,
 
   object AndroidX {
 
-    // Version 2.6.1 results in 'duplicate classes' build issue
-    private const val lifecycleVersion = "2.5.1"
+    /*
+     * Pinned to the last releases that still build against compileSdk 34. Newer majors
+     * (lifecycle 2.9+, navigation 2.9+, core-ktx 1.15+, appcompat 1.7.1+) are compiled against
+     * SDK 35/36 and make AGP fail with "requires a higher compileSdk", so they can only move
+     * together with COMPILE_SDK_VERSION.
+     */
+    private const val lifecycleVersion = "2.8.7"
 
-    private const val navigationVersion = "2.5.3"
+    private const val navigationVersion = "2.8.9"
 
     @JvmStatic
-    val AppCompat = parseDependency("androidx.appcompat:appcompat:1.6.1")
+    val AppCompat = parseDependency("androidx.appcompat:appcompat:1.7.0")
 
     @JvmStatic
     val ConstraintLayout =
-      parseDependency("androidx.constraintlayout:constraintlayout:2.1.4")
+      parseDependency("androidx.constraintlayout:constraintlayout:2.2.0")
 
     @JvmStatic
     val LifeCycle_LiveData = parseDependency(
@@ -87,17 +92,17 @@ data class Dependency(val configuration: DependencyConfiguration,
     object Compose {
 
       @JvmStatic
-      val Core_Ktx = parseDependency("androidx.core:core-ktx:1.8.0")
+      val Core_Ktx = parseDependency("androidx.core:core-ktx:1.13.1")
 
       @JvmStatic
       val LifeCycle_Runtime_Ktx = parseDependency(
-        "androidx.lifecycle:lifecycle-runtime-ktx:2.3.1")
+        "androidx.lifecycle:lifecycle-runtime-ktx:${lifecycleVersion}")
 
       @JvmStatic
-      val Activity = parseDependency("androidx.activity:activity-compose:1.5.1")
+      val Activity = parseDependency("androidx.activity:activity-compose:1.9.3")
 
       @JvmStatic
-      val BOM = parseDependency("androidx.compose:compose-bom:2022.10.00",
+      val BOM = parseDependency("androidx.compose:compose-bom:2024.06.00",
         isPlatform = true)
 
       @JvmStatic
@@ -127,6 +132,6 @@ data class Dependency(val configuration: DependencyConfiguration,
   object Google {
 
     @JvmStatic
-    val Material = parseDependency("com.google.android.material:material:1.9.0")
+    val Material = parseDependency("com.google.android.material:material:1.12.0")
   }
 }

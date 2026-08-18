@@ -23,7 +23,12 @@ import com.itsaky.androidide.templates.base.AndroidModuleTemplateBuilder
 import com.itsaky.androidide.templates.base.ModuleTemplateBuilder
 import com.itsaky.androidide.templates.base.modules.dependencies
 
-private const val compose_kotlinCompilerExtensionVersion = "1.3.2"
+/*
+ * Must match KOTLIN_VERSION exactly — the Compose compiler plugin is built against one specific
+ * Kotlin release. 1.5.15 is the extension for Kotlin 1.9.25 per Google's compatibility map; the
+ * previous value (1.3.2) targeted Kotlin 1.7.20 and would refuse to compile.
+ */
+private const val compose_kotlinCompilerExtensionVersion = "1.5.15"
 
 private val AndroidModuleTemplateBuilder.androidPlugin: String
   get() {

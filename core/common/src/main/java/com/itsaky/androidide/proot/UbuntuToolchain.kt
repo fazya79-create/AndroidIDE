@@ -42,7 +42,8 @@ enum class ToolchainPiece(val label: String, val sizeHint: String) {
  */
 object UbuntuToolchain {
 
-  const val GRADLE_VERSION = "8.8"
+  /** Must match `GRADLE_DISTRIBUTION_VERSION` in `templates-api`'s constants. */
+  const val GRADLE_VERSION = "8.14.3"
   const val SDK_RELEASE = "36.0.2"
   const val BUILD_TOOLS = "36.1.0"
   /**
@@ -50,7 +51,7 @@ object UbuntuToolchain {
    * different level makes every generated project fail with
    * "Failed to find target with hash string 'android-NN'".
    */
-  const val DEFAULT_PLATFORM = 33
+  const val DEFAULT_PLATFORM = 34
 
   private const val SDK_URL =
     "https://github.com/HomuHomu833/android-sdk-custom/releases/download/" +
