@@ -201,11 +201,13 @@ class TerminalActivity : TermuxActivity() {
   }
 
   /**
-   * Installs the Ubuntu rootfs (if needed) and starts a session running the toolchain
-   * installer inside it. Replaces the old `idesetup.sh` flow, whose apt repository is dead.
+   * Installs the Ubuntu rootfs, then opens an interactive shell inside it.
+   *
+   * No toolchain installation happens here any more: the JDK, SDK and Gradle are extracted from
+   * release assets during onboarding, so this only has to make the rootfs itself available.
    */
   private fun addIdesetupSession() {
-    log.debug("Starting Ubuntu toolchain setup")
+    log.debug("Preparing the Ubuntu rootfs")
 
     val progress = MaterialAlertDialogBuilder(this)
       .setTitle(R.string.title_installing_ubuntu)
@@ -214,13 +216,13 @@ class TerminalActivity : TermuxActivity() {
       .show()
 
     setupScope.launch {
-      val bootCommand = ToolchainSetup.prepare(this@TerminalActivity) { phase ->
+      val ready = ToolchainSetup.prepare(this@TerminalActivity) { phase ->
         setupScope.launch { progress.setMessage(describe(phase)) }
       }
 
       progress.dismiss()
 
-      if (bootCommand == null) {
+      if (!ready) {
         flashError(R.string.msg_cannot_create_terminal_session)
         return@launch
       }
@@ -229,8 +231,7 @@ class TerminalActivity : TermuxActivity() {
         /* executablePath = */ ProotConfig.prootBinary(this@TerminalActivity),
         /* arguments = */ ProotConfig.shellArgs(
           context = this@TerminalActivity,
-          bootCommand = bootCommand,
-          keepAlive = false
+          keepAlive = true
         ).drop(1).toTypedArray(),
         /* stdin = */ null,
         /* workingDirectory = */ Environment.HOME.absolutePath,

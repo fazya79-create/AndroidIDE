@@ -19,8 +19,6 @@ package com.itsaky.androidide.activities
 
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.github.appintro.AppIntro2
@@ -40,7 +38,7 @@ import com.itsaky.androidide.preferences.internal.prefManager
 import com.itsaky.androidide.tasks.launchAsyncWithProgress
 import com.itsaky.androidide.ui.themes.IThemeManager
 import com.itsaky.androidide.offline.BundleInstaller
-import com.itsaky.androidide.utils.Environment
+import com.itsaky.androidide.proot.UbuntuToolchain
 import com.itsaky.androidide.utils.flashError
 import com.termux.shared.android.PackageUtils
 import com.termux.shared.markdown.MarkdownUtils
@@ -54,16 +52,6 @@ import kotlinx.coroutines.withContext
 
 class OnboardingActivity : AppIntro2() {
 
-  private val terminalActivityCallback = registerForActivityResult(
-    ActivityResultContracts.StartActivityForResult()) {
-    Log.d(TAG, "TerminalActivity: resultCode=${it.resultCode}")
-    if (!isFinishing) {
-      reloadJdkDistInfo {
-        tryNavigateToMainIfSetupIsCompleted()
-      }
-    }
-  }
-
   private val activityScope =
     CoroutineScope(Dispatchers.Main + CoroutineName("OnboardingActivity"))
 
@@ -71,7 +59,6 @@ class OnboardingActivity : AppIntro2() {
 
   companion object {
 
-    private const val TAG = "OnboardingActivity"
     private const val KEY_ARCHCONFIG_WARNING_IS_SHOWN = "ide.archConfig.experimentalWarning.isShown"
   }
 
@@ -137,6 +124,8 @@ class OnboardingActivity : AppIntro2() {
 
   override fun onResume() {
     super.onResume()
+    // The extracted JDK has to be registered with the distribution provider before anything can
+    // resolve `javaHome`, so the scan still runs — it just no longer waits on a terminal session.
     reloadJdkDistInfo {
       tryNavigateToMainIfSetupIsCompleted()
     }
@@ -159,39 +148,20 @@ class OnboardingActivity : AppIntro2() {
       return
     }
 
-    if (currentFragment is IdeSetupConfigurationFragment) {
-      // The bundle download is a prerequisite: without it every build would hit the network.
-      if (!currentFragment.isBundleInstalled()) {
-        flashError(string.msg_bundle_required)
-        return
-      }
-
-      // Only the toolchain needs the terminal; when it is already installed the bundle was the
-      // only missing piece and setup is complete.
-      if (!isToolchainInstalled()) {
-        val intent = Intent(this, TerminalActivity::class.java)
-        intent.putExtra(TerminalActivity.EXTRA_ONBOARDING_RUN_IDESETUP, true)
-        terminalActivityCallback.launch(intent)
-        return
-      }
+    if (currentFragment is IdeSetupConfigurationFragment && !currentFragment.isBundleInstalled()) {
+      flashError(string.msg_bundle_required)
+      return
     }
 
     tryNavigateToMainIfSetupIsCompleted()
   }
 
-  /** Whether the JDK and Android SDK are present inside the rootfs. */
-  private fun isToolchainInstalled(): Boolean {
-    return IJdkDistributionProvider.getInstance().installedDistributions.isNotEmpty()
-        && Environment.ANDROID_HOME.exists()
-  }
-
   /**
-   * The bundle is part of a complete setup: without it every build would need the network, which
-   * is exactly what the offline mode exists to avoid. Onboarding therefore shows its slide until
-   * the bundle is installed, even when the toolchain itself is already present.
+   * Setup is complete once the release assets are extracted: they contain the JDK, Android SDK,
+   * Gradle and every build dependency, so there is nothing left for a terminal session to install.
    */
   private fun checkToolsIsInstalled(): Boolean {
-    return isToolchainInstalled() && BundleInstaller.isInstalled(this)
+    return BundleInstaller.isInstalled(this) && UbuntuToolchain.isReady(this)
   }
 
   private fun isSetupCompleted(): Boolean {

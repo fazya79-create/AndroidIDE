@@ -21,14 +21,17 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
-import java.io.File
 
 /**
- * Prepares the Ubuntu rootfs and returns the shell command that installs the build toolchain.
+ * Prepares the Ubuntu rootfs.
  *
- * The original setup flow (`idesetup.sh`) installed OpenJDK through Termux's apt repository.
- * That repository is archived and its signing key expired in February 2025, so `apt update`
- * fails with `EXPKEYSIG` and can never be fixed upstream. Ubuntu's own apt is used instead.
+ * The toolchain itself is no longer installed here: the JDK, Android SDK and Gradle arrive as
+ * prebuilt release assets extracted into `<filesDir>/toolchains`, which is bound at `/opt` inside
+ * the rootfs. Nothing needs a terminal session, and nothing is fetched from five separate hosts on
+ * first launch.
+ *
+ * The rootfs stays a live download on purpose — it is a real Linux environment the user runs `apt`
+ * and npm-installed CLIs inside.
  *
  * @author Akash Yadav
  */
@@ -37,17 +40,17 @@ object ToolchainSetup {
   private val log = LoggerFactory.getLogger(ToolchainSetup::class.java)
 
   /**
-   * Installs the Ubuntu rootfs if needed, then returns the guest command that installs the
-   * remaining toolchain pieces. Returns `null` if the rootfs could not be installed.
+   * Installs the Ubuntu rootfs if needed and prepares its mounts.
+   *
+   * @return `true` when the rootfs is ready to run commands in.
    */
   suspend fun prepare(
     context: Context,
-    platform: Int = UbuntuToolchain.DEFAULT_PLATFORM,
     onProgress: (InstallPhase) -> Unit = {}
-  ): String? = withContext(Dispatchers.IO) {
+  ): Boolean = withContext(Dispatchers.IO) {
     if (!ProotConfig.isAvailable(context)) {
       log.error("proot binary is missing for this ABI")
-      return@withContext null
+      return@withContext false
     }
 
     if (!ProotConfig.isInstalled(context)) {
@@ -60,27 +63,17 @@ object ToolchainSetup {
         onProgress(phase)
       }
       if (failed || !ProotConfig.isInstalled(context)) {
-        return@withContext null
+        return@withContext false
       }
     }
 
     ProotConfig.prepareMounts(context)
     ProotConfig.writeShellProfile(context)
-    UbuntuToolchain.writeInstallScript(context, platform)
+    true
   }
 
-  /** Human-readable summary of what still needs downloading, for the confirmation prompt. */
-  fun missingSummary(context: Context, platform: Int = UbuntuToolchain.DEFAULT_PLATFORM): String =
-    UbuntuToolchain.missing(context, platform)
-      .joinToString(", ") { "${it.label} (${it.sizeHint})" }
-
-  /** Deletes the rootfs, keeping the downloaded toolchain in `<filesDir>/toolchains`. */
+  /** Deletes the rootfs, keeping the extracted toolchain in `<filesDir>/toolchains`. */
   fun resetRootfs(context: Context) {
     ProotConfig.rootfsDir(context).deleteRecursivelySafe()
   }
-
-  fun toolchainSize(context: Context): Long =
-    File(ProotConfig.toolchainRoot(context).absolutePath).walkBottomUp()
-      .filter { it.isFile }
-      .sumOf { it.length() }
 }
