@@ -36,7 +36,7 @@ object OfflineBundle {
   const val VERSION = "offline-bundle-v3"
 
   /** Release tag holding the JDK, Android SDK and Gradle archives. */
-  const val TOOLCHAIN_VERSION = "toolchain-v2"
+  const val TOOLCHAIN_VERSION = "toolchain-v3"
 
   private const val REPO_BASE =
     "https://github.com/fazya79-create/AndroidIDE/releases/download"
@@ -97,13 +97,13 @@ object OfflineBundle {
       fileName = "android-sdk.zip.br",
       destination = "$TOOLCHAIN_PATH/android-sdk",
       tag = TOOLCHAIN_VERSION,
-      sizeMb = 90
+      sizeMb = 70
     ),
     Entry(
       fileName = "gradle.zip.br",
       destination = "$TOOLCHAIN_PATH/gradle",
       tag = TOOLCHAIN_VERSION,
-      sizeMb = 130
+      sizeMb = 125
     )
   )
 

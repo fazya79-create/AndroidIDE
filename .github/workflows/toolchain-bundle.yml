@@ -14,7 +14,7 @@ on:
       tag:
         description: 'Release tag to publish the toolchain under'
         required: true
-        default: 'toolchain-v2'
+        default: 'toolchain-v3'
 
 permissions:
   contents: write
@@ -88,20 +88,20 @@ jobs:
 
       - name: Download Gradle
         run: |
-          curl -fsSL -o gradle.zip \
+          # NOT gradle.zip: the archive step writes gradle.zip, and `zip` APPENDS to an existing
+          # archive rather than replacing it. Sharing the name silently merged the distribution
+          # into the output, so the asset carried both copies (145 MB each, 259 MB compressed).
+          curl -fsSL -o gradle-dist-download.zip \
             "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
-          # Unpack outside stage/, then move the single versioned directory in. Unzipping straight
-          # into stage/ left both gradle-<version>/ and its contents at the top level, doubling
-          # the archive to 276 MB.
           rm -rf gradle-unpack
           mkdir -p gradle-unpack
-          unzip -q gradle.zip -d gradle-unpack
+          unzip -q gradle-dist-download.zip -d gradle-unpack
           rm -rf stage/gradle
           mkdir -p stage
           mv "gradle-unpack/gradle-${GRADLE_VERSION}" stage/gradle
-          rm -rf gradle-unpack
+          rm -rf gradle-unpack gradle-dist-download.zip
           test -x stage/gradle/bin/gradle
-          test ! -e stage/gradle/gradle-${GRADLE_VERSION}
+          test ! -e "stage/gradle/gradle-${GRADLE_VERSION}"
           du -sh stage/gradle
 
       - name: Drop what is only needed to install the SDK
@@ -124,9 +124,19 @@ jobs:
       - name: Archive each component with stored entries
         run: |
           # Stored (-0) so the Brotli pass sees raw bytes, and so JARs stay mmap-friendly.
+          # `rm -f` first because `zip` appends to an existing archive instead of replacing it.
           for component in jdk android-sdk gradle; do
+            rm -f "${component}.zip"
             ( cd "stage/$component" && zip -0 -q -r "../../${component}.zip" . )
-            ls -la "${component}.zip"
+            staged=$(du -sm "stage/$component" | cut -f1)
+            archived=$(( $(stat -c%s "${component}.zip") / 1048576 ))
+            echo "${component}: staged ${staged} MB, archive ${archived} MB"
+            # A stored archive is within a few MB of its input; anything larger means duplicated
+            # content leaked in.
+            if [ "$archived" -gt $(( staged + 20 )) ]; then
+              echo "archive is larger than its input - duplicated content"
+              exit 1
+            fi
           done
 
       - name: Brotli-compress the archives
