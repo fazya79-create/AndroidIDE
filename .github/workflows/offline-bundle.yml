@@ -20,13 +20,14 @@ permissions:
 env:
   # Must match the version baked into the APK's init script (see ProjectConfig.downloadVersion).
   IDE_PLUGIN_VERSION: '2.7.1-beta'
-  AGP_VERSION: '8.11.0'
+  AGP_VERSION: '8.5.0'
   GRADLE_VERSION: '8.14.3'
   KOTLIN_VERSION: '1.9.22'
   COMPOSE_COMPILER_VERSION: '1.5.10'
   COMPILE_SDK: '33'
   MIN_SDK: '21'
   TARGET_SDK: '33'
+  BUILD_TOOLS_VERSION: '33.0.1'
 
 jobs:
   harvest:
@@ -46,7 +47,7 @@ jobs:
 
       - name: Install the platform the template compiles against
         run: |
-          sdkmanager "platforms;android-${COMPILE_SDK}" "build-tools;34.0.0" > /dev/null
+          sdkmanager "platforms;android-${COMPILE_SDK}" "build-tools;${BUILD_TOOLS_VERSION}" > /dev/null
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
 
       - name: Generate a template project that mirrors the IDE's own template

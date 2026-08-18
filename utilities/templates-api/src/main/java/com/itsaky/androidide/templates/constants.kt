@@ -23,13 +23,22 @@ package com.itsaky.androidide.templates
 
 /*
  * Pinned so a single harvested offline Maven repository can satisfy every generated project.
- * These are the versions CodeOnTheGo ships, i.e. a combination already proven to build on-device.
  * Changing any of them invalidates the offline bundle and requires re-harvesting it.
+ *
+ * AGP MUST stay in lockstep with `agp-tooling` in gradle/libs.versions.toml: the IDE's tooling
+ * API is compiled against that version's model interfaces. A newer AGP calls model methods the
+ * older interface lacks and project sync dies with
+ * "Unsupported method: ModelBuilderParameter.getAdditionalArtifactsInModel()".
  */
-const val ANDROID_GRADLE_PLUGIN_VERSION = "8.11.0"
+const val ANDROID_GRADLE_PLUGIN_VERSION = "8.5.0"
 const val GRADLE_DISTRIBUTION_VERSION = "8.14.3"
 const val KOTLIN_VERSION = "1.9.22"
 
+/*
+ * The SDK platform generated projects compile against. `UbuntuToolchain.DEFAULT_PLATFORM` installs
+ * exactly this API level — a mismatch surfaces on device as
+ * "Failed to find target with hash string 'android-NN'".
+ */
 val TARGET_SDK_VERSION = Sdk.Tiramisu
 val COMPILE_SDK_VERSION = Sdk.Tiramisu
 

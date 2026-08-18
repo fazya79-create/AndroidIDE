@@ -1,0 +1,156 @@
+name: Toolchain bundle
+
+# Packages the aarch64 toolchain (JDK, Android SDK, Gradle) into release assets so a device
+# installs it by download+extract instead of running a shell script that fetches from five hosts.
+#
+# The Ubuntu rootfs is deliberately NOT bundled: it is a real Linux environment the user runs
+# apt/npm inside, so it stays a live download.
+#
+# Versions MUST match UbuntuToolchain.kt and templates-api/constants.kt.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish the toolchain under'
+        required: true
+        default: 'toolchain-v1'
+
+permissions:
+  contents: write
+
+env:
+  JDK_VERSION: '17.0.20+8'
+  JDK_TARBALL: 'OpenJDK17U-jdk_aarch64_linux_hotspot_17.0.20_8.tar.gz'
+  SDK_RELEASE: '36.0.2'
+  BUILD_TOOLS: '36.1.0'
+  PLATFORM: '33'
+  GRADLE_VERSION: '8.14.3'
+
+jobs:
+  toolchain:
+    name: Package the aarch64 toolchain
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Download the aarch64 JDK
+        run: |
+          jdk_tag="jdk-${JDK_VERSION//+/%2B}"
+          curl -fsSL -o jdk.tar.gz \
+            "https://github.com/adoptium/temurin17-binaries/releases/download/${jdk_tag}/${JDK_TARBALL}"
+          mkdir -p stage/jdk
+          # Strip the versioned top-level directory so the archive extracts straight into /opt/jdk.
+          tar -xzf jdk.tar.gz -C stage/jdk --strip-components=1
+          stage/jdk/bin/java -version 2>&1 | head -2 || echo "cannot exec aarch64 java on x86 runner (expected)"
+          du -sh stage/jdk
+
+      - name: Download the aarch64 Android SDK
+        run: |
+          curl -fsSL -o sdk.tar.xz \
+            "https://github.com/HomuHomu833/android-sdk-custom/releases/download/${SDK_RELEASE}/android-sdk-aarch64-linux-gnu.tar.xz"
+          mkdir -p stage/android-sdk
+          tar -xJf sdk.tar.xz -C stage/android-sdk --strip-components=1
+          ls stage/android-sdk
+          du -sh stage/android-sdk
+
+      - name: Add the SDK platform and its package metadata
+        run: |
+          # sdkmanager writes a package.xml next to every component; AGP refuses to use a platform
+          # without it, so the platform is taken from a real sdkmanager install rather than a
+          # bare zip. cmdline-tools runs on the host (x86), the payload it fetches is
+          # architecture-independent.
+          curl -fsSL -o cmdline.zip \
+            "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+          unzip -q cmdline.zip -d cmdline
+          export ANDROID_HOME="$PWD/host-sdk"
+          mkdir -p "$ANDROID_HOME"
+          yes | cmdline/cmdline-tools/bin/sdkmanager \
+            --sdk_root="$ANDROID_HOME" \
+            "platforms;android-${PLATFORM}" > /dev/null 2>&1 || true
+
+          test -f "$ANDROID_HOME/platforms/android-${PLATFORM}/package.xml"
+          mkdir -p stage/android-sdk/platforms
+          cp -r "$ANDROID_HOME/platforms/android-${PLATFORM}" stage/android-sdk/platforms/
+          # licenses/ must come along or sdkmanager treats the SDK as unaccepted.
+          cp -r "$ANDROID_HOME/licenses" stage/android-sdk/ 2>/dev/null || true
+          ls stage/android-sdk/platforms
+
+      - name: Verify build-tools are present for aarch64
+        run: |
+          if [ ! -d "stage/android-sdk/build-tools/${BUILD_TOOLS}" ]; then
+            echo "build-tools ${BUILD_TOOLS} missing from the aarch64 SDK tarball:"
+            ls stage/android-sdk/build-tools 2>/dev/null || echo "  (no build-tools dir at all)"
+            exit 1
+          fi
+          # aapt2 and d8 must be aarch64 ELF binaries, not x86 ones.
+          file "stage/android-sdk/build-tools/${BUILD_TOOLS}/aapt2" || true
+
+      - name: Download Gradle
+        run: |
+          curl -fsSL -o gradle.zip \
+            "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
+          mkdir -p stage/gradle-tmp
+          unzip -q gradle.zip -d stage/gradle-tmp
+          mv "stage/gradle-tmp/gradle-${GRADLE_VERSION}" stage/gradle
+          rmdir stage/gradle-tmp
+          test -x stage/gradle/bin/gradle
+          du -sh stage/gradle
+
+      - name: Drop what is only needed to install the SDK
+        run: |
+          # cmdline-tools/lib is ~157 MB of sdkmanager/lint JARs. The platform is already staged
+          # above, so nothing on device needs to run sdkmanager again.
+          before=$(du -sm stage/android-sdk | cut -f1)
+          rm -rf stage/android-sdk/cmdline-tools/*/lib
+          rm -rf stage/android-sdk/emulator stage/android-sdk/system-images
+          after=$(du -sm stage/android-sdk | cut -f1)
+          echo "android-sdk: ${before} MB -> ${after} MB"
+
+      - name: Archive each component with stored entries
+        run: |
+          # Stored (-0) so the Brotli pass sees raw bytes, and so JARs stay mmap-friendly.
+          for component in jdk android-sdk gradle; do
+            ( cd "stage/$component" && zip -0 -q -r "../../${component}.zip" . )
+            ls -la "${component}.zip"
+          done
+
+      - name: Brotli-compress the archives
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq brotli
+          for component in jdk android-sdk gradle; do
+            brotli -q 11 -f -o "${component}.zip.br" "${component}.zip"
+            raw=$(stat -c%s "${component}.zip")
+            comp=$(stat -c%s "${component}.zip.br")
+            python3 -c "print(f'${component}: {$raw/1048576:.0f} MB -> {$comp/1048576:.0f} MB')"
+          done
+
+      - name: Publish checksums
+        run: |
+          sha256sum jdk.zip.br android-sdk.zip.br gradle.zip.br | tee checksums.txt
+
+      - name: Summarize
+        run: |
+          {
+            echo "### Toolchain bundle"
+            echo
+            echo "| component | download | extracted |"
+            echo "|---|---|---|"
+            for component in jdk android-sdk gradle; do
+              echo "| $component | $(du -h ${component}.zip.br | cut -f1) | $(du -sh stage/$component | cut -f1) |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 ||
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "Toolchain bundle" \
+              --notes "Temurin JDK ${JDK_VERSION}, Android SDK ${SDK_RELEASE} (platform ${PLATFORM}, build-tools ${BUILD_TOOLS}), Gradle ${GRADLE_VERSION} for aarch64."
+
+          gh release upload "$TAG" jdk.zip.br android-sdk.zip.br gradle.zip.br checksums.txt \
+            --repo "$GITHUB_REPOSITORY" --clobber
