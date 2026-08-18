@@ -43,6 +43,7 @@ object ToolchainSetup {
   suspend fun prepare(
     context: Context,
     platform: Int = UbuntuToolchain.DEFAULT_PLATFORM,
+    jdk: String = UbuntuToolchain.DEFAULT_JDK,
     onProgress: (InstallPhase) -> Unit = {}
   ): String? = withContext(Dispatchers.IO) {
     if (!ProotConfig.isAvailable(context)) {
@@ -66,7 +67,7 @@ object ToolchainSetup {
 
     ProotConfig.prepareMounts(context)
     ProotConfig.writeShellProfile(context)
-    UbuntuToolchain.writeInstallScript(context, platform)
+    UbuntuToolchain.writeInstallScript(context, platform, jdk)
   }
 
   /** Human-readable summary of what still needs downloading, for the confirmation prompt. */

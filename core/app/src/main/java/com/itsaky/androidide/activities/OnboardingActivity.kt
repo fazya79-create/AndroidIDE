@@ -161,8 +161,8 @@ class OnboardingActivity : AppIntro2() {
       val intent = Intent(this, TerminalActivity::class.java)
       if (currentFragment.isAutoInstall()) {
         intent.putExtra(TerminalActivity.EXTRA_ONBOARDING_RUN_IDESETUP, true)
-        intent.putExtra(TerminalActivity.EXTRA_ONBOARDING_RUN_IDESETUP_ARGS,
-          currentFragment.buildIdeSetupArguments())
+        intent.putExtra(TerminalActivity.EXTRA_SETUP_SDK, currentFragment.selectedSdk())
+        intent.putExtra(TerminalActivity.EXTRA_SETUP_JDK, currentFragment.selectedJdk())
       }
       terminalActivityCallback.launch(intent)
       return

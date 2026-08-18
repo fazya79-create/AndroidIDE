@@ -40,11 +40,9 @@ import androidx.core.view.isVisible
 import com.github.appintro.SlidePolicy
 import com.itsaky.androidide.R
 import com.itsaky.androidide.databinding.LayoutOnboardngSetupConfigBinding
-import com.itsaky.androidide.models.IdeSetupArgument
 import com.itsaky.androidide.resources.R.string
 import com.itsaky.androidide.tasks.runOnUiThread
 import com.itsaky.androidide.utils.ConnectionInfo
-import com.itsaky.androidide.utils.Environment
 import com.itsaky.androidide.utils.flashError
 import com.itsaky.androidide.utils.getConnectionInfo
 
@@ -96,16 +94,18 @@ class IdeSetupConfigurationFragment : OnboardingFragment(), SlidePolicy {
         installOpenssh.isEnabled = isChecked
       }
 
-      val sdkVersions = SdkVersion.entries.map { "SDK ${it.version}" }.reversed()
-      sdkVersion.setText(sdkVersions[0])
+      // Newest first, and preselect the level the templates compile against so the default choice
+      // always produces a buildable project.
+      val sdkVersions = SdkVersion.entries.map { it.displayName }.reversed()
+      sdkVersion.setText(SdkVersion.default.displayName)
       sdkVersion.setAdapter(ArrayAdapter(
         requireContext(),
         com.google.android.material.R.layout.m3_auto_complete_simple_item,
         sdkVersions)
       )
 
-      val jdkVersions = JdkVersion.entries.map { "JDK ${it.version}" }
-      jdkVersion.setText(jdkVersions[0])
+      val jdkVersions = JdkVersion.entries.map { it.displayName }
+      jdkVersion.setText(JdkVersion.default.displayName)
       jdkVersion.setAdapter(ArrayAdapter(
         requireContext(),
         com.google.android.material.R.layout.m3_auto_complete_simple_item,
@@ -118,32 +118,11 @@ class IdeSetupConfigurationFragment : OnboardingFragment(), SlidePolicy {
 
   fun isAutoInstall(): Boolean = content.autoInstallSwitch.isChecked
 
-  fun buildIdeSetupArguments(): Array<String> {
-    val args = mutableListOf<String>()
-    args.setArgument(IdeSetupArgument.INSTALL_DIR, Environment.HOME.absolutePath)
-    args.setArgument(IdeSetupArgument.SDK_VERSION,
-      SdkVersion.fromDisplayName(content.sdkVersion.text).version)
-    args.setArgument(IdeSetupArgument.JDK_VERSION,
-      JdkVersion.fromDisplayName(content.jdkVersion.text).version)
-    args.setArgument(IdeSetupArgument.ASSUME_YES)
-    if (content.installGit.isChecked) {
-      args.setArgument(IdeSetupArgument.WITH_GIT)
-    }
-    if (content.installOpenssh.isChecked) {
-      args.setArgument(IdeSetupArgument.WITH_OPENSSH)
-    }
-    return args.toTypedArray()
-  }
+  /** API level picked in the dropdown. */
+  fun selectedSdk(): Int = SdkVersion.fromDisplayName(content.sdkVersion.text).api
 
-  private fun MutableList<String>.setArgument(argument: IdeSetupArgument, value: Any? = null) {
-    val strVal = value?.toString() ?: ""
-    if (argument.requiresValue && strVal.isBlank()) {
-      throw IllegalArgumentException("${argument.name} requires a value")
-    }
-
-    add(argument.argumentName)
-    add(strVal)
-  }
+  /** JDK feature version picked in the dropdown. */
+  fun selectedJdk(): String = JdkVersion.fromDisplayName(content.jdkVersion.text).version
 
   override fun onStart() {
     super.onStart()

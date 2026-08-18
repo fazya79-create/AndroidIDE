@@ -65,9 +65,24 @@ object UbuntuToolchain {
    * to a versioned path inside the rootfs, and symlinking `/opt/jdk` to it produces a
    * guest-absolute link that is dangling when read from the host — which breaks JDK detection.
    */
-  private const val JDK_URL =
-    "https://github.com/adoptium/temurin17-binaries/releases/download/" +
-      "jdk-17.0.20%2B8/OpenJDK17U-jdk_aarch64_linux_hotspot_17.0.20_8.tar.gz"
+  /**
+   * Eclipse Temurin aarch64 builds, keyed by feature version. Both are GA releases; the exact patch
+   * levels are pinned so a build is reproducible rather than tracking whatever is latest.
+   *
+   * AGP requires 17 as a minimum and the templates target it, but Gradle 8.14 runs on 21 too, so
+   * either is a valid choice.
+   */
+  private val JDK_URLS = mapOf(
+    "17" to ("https://github.com/adoptium/temurin17-binaries/releases/download/" +
+      "jdk-17.0.20%2B8/OpenJDK17U-jdk_aarch64_linux_hotspot_17.0.20_8.tar.gz"),
+    "21" to ("https://github.com/adoptium/temurin21-binaries/releases/download/" +
+      "jdk-21.0.12%2B8/OpenJDK21U-jdk_aarch64_linux_hotspot_21.0.12_8.tar.gz")
+  )
+
+  /** Feature version installed when the caller does not choose one. */
+  const val DEFAULT_JDK = "17"
+
+  private fun jdkUrl(jdk: String) = JDK_URLS[jdk] ?: JDK_URLS.getValue(DEFAULT_JDK)
 
   private const val SCRIPT_DIR = "root/androidide-setup"
   private const val SCRIPT_NAME = "install-toolchain.sh"
@@ -91,21 +106,25 @@ object UbuntuToolchain {
    * Writes the installer script into the rootfs and returns the guest command that runs it.
    * Every step is guarded by an existence check, so re-running never re-downloads.
    */
-  fun writeInstallScript(context: Context, platform: Int = DEFAULT_PLATFORM): String {
+  fun writeInstallScript(
+    context: Context,
+    platform: Int = DEFAULT_PLATFORM,
+    jdk: String = DEFAULT_JDK
+  ): String {
     val dir = File(ProotConfig.rootfsDir(context), SCRIPT_DIR).apply { mkdirs() }
     val script = File(dir, SCRIPT_NAME)
     runCatching {
-      script.writeText(buildScript(platform))
+      script.writeText(buildScript(platform, jdk))
       script.setExecutable(true)
     }
     // `exit` terminates the login shell so the terminal closes and onboarding can continue.
     return "bash /${SCRIPT_DIR}/$SCRIPT_NAME && exit 0 || exit 1"
   }
 
-  private fun buildScript(platform: Int): String = buildString {
+  private fun buildScript(platform: Int, jdk: String): String = buildString {
     val opt = ProotConfig.GUEST_OPT
     val sdk = ProotConfig.GUEST_SDK_ROOT
-    val jdk = ProotConfig.GUEST_JAVA_HOME
+    val jdkDir = ProotConfig.GUEST_JAVA_HOME
     val gradle = ProotConfig.GUEST_GRADLE_HOME
 
     appendLine("set -e")
@@ -115,17 +134,20 @@ object UbuntuToolchain {
     appendLine("apt-get update -y")
     appendLine("apt-get install -y --no-install-recommends curl unzip xz-utils ca-certificates")
     appendLine()
-    appendLine("if [ ! -x $jdk/bin/java ]; then")
-    appendLine("  echo '==> downloading OpenJDK 17'")
+    // The marker records which feature version is installed, so picking a different one in the
+    // setup UI reinstalls instead of silently keeping the old JDK.
+    appendLine("if [ ! -x $jdkDir/bin/java ] || [ \"\$(cat $jdkDir/.feature-version 2>/dev/null)\" != \"$jdk\" ]; then")
+    appendLine("  echo '==> downloading OpenJDK $jdk'")
     appendLine("  cd $opt")
-    appendLine("  curl -fL --retry 3 -o jdk.tar.gz $JDK_URL")
-    appendLine("  echo '==> extracting OpenJDK 17'")
+    appendLine("  curl -fL --retry 3 -o jdk.tar.gz ${jdkUrl(jdk)}")
+    appendLine("  echo '==> extracting OpenJDK $jdk'")
     appendLine("  rm -rf jdk jdk-tmp && mkdir jdk-tmp")
     appendLine("  tar -xzf jdk.tar.gz -C jdk-tmp --strip-components=1")
     appendLine("  rm -f jdk.tar.gz")
+    appendLine("  echo $jdk > jdk-tmp/.feature-version")
     appendLine("  mv jdk-tmp jdk")
     appendLine("fi")
-    appendLine("$jdk/bin/java -version")
+    appendLine("$jdkDir/bin/java -version")
     appendLine()
     appendLine("if [ ! -x $sdk/cmdline-tools/bin/sdkmanager ]; then")
     appendLine("  echo '==> downloading Android SDK tools'")
@@ -136,16 +158,22 @@ object UbuntuToolchain {
     appendLine("  rm -f sdk.tar.xz")
     appendLine("fi")
     appendLine()
-    appendLine("export JAVA_HOME=$jdk")
+    appendLine("export JAVA_HOME=$jdkDir")
     appendLine("export ANDROID_HOME=$sdk")
     appendLine("export ANDROID_SDK_ROOT=$sdk")
     appendLine("export PATH=\$JAVA_HOME/bin:$sdk/cmdline-tools/bin:\$PATH")
     appendLine()
-    appendLine("if [ ! -d $sdk/platforms/android-$platform ]; then")
-    appendLine("  echo '==> installing platform android-$platform'")
-    appendLine(
-      "  sdkmanager --sdk_root=$sdk \"platforms;android-$platform\" \"build-tools;$BUILD_TOOLS\""
-    )
+    // The template's compileSdk is always installed; a different pick in the setup UI is installed
+    // as well rather than instead, so generated projects still compile either way.
+    for (api in linkedSetOf(DEFAULT_PLATFORM, platform)) {
+      appendLine("if [ ! -d $sdk/platforms/android-$api ]; then")
+      appendLine("  echo '==> installing platform android-$api'")
+      appendLine("  sdkmanager --sdk_root=$sdk \"platforms;android-$api\"")
+      appendLine("fi")
+    }
+    appendLine("if [ ! -d $sdk/build-tools/$BUILD_TOOLS ]; then")
+    appendLine("  echo '==> installing build-tools $BUILD_TOOLS'")
+    appendLine("  sdkmanager --sdk_root=$sdk \"build-tools;$BUILD_TOOLS\"")
     appendLine("fi")
     appendLine()
     appendLine("if [ ! -x $gradle/bin/gradle ]; then")

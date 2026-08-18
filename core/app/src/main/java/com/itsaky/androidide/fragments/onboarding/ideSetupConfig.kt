@@ -17,40 +17,45 @@
 
 package com.itsaky.androidide.fragments.onboarding
 
-import com.itsaky.androidide.app.configuration.CpuArch
-
-private val ARM_ONLY = arrayOf(CpuArch.AARCH64, CpuArch.ARM)
-private val ALL = arrayOf(CpuArch.AARCH64, CpuArch.ARM, CpuArch.X86_64)
+import com.itsaky.androidide.proot.UbuntuToolchain
 
 /**
- * Android SDK versions.
+ * Android SDK platforms offered during setup.
+ *
+ * These are API levels installed through `sdkmanager`, not the `androidide-tools` release names the
+ * archived setup script used. The platform generated projects compile against is installed
+ * regardless of what is picked here, so choosing a newer level only adds to the installation.
  *
  * @author Akash Yadav
  */
-enum class SdkVersion(val version: String, val supportedArchs: Array<CpuArch>) {
+enum class SdkVersion(val api: Int, val label: String) {
 
-  SDK_33_0_1("33.0.1", ARM_ONLY),
-  SDK_34_0_0("34.0.0", ARM_ONLY),
-  SDK_34_0_1("34.0.1", ARM_ONLY),
-  SDK_34_0_3("34.0.3", ARM_ONLY),
-  SDK_34_0_4("34.0.4", ALL),
+  API_33(33, "Android 13"),
+  API_34(34, "Android 14"),
+  API_35(35, "Android 15"),
+  API_36(36, "Android 16"),
   ;
 
-  val displayName = "SDK $version"
+  val displayName = "API $api ($label)"
 
   companion object {
 
+    /** The level generated projects compile against, preselected in the dropdown. */
     @JvmStatic
-    fun fromDisplayName(displayName: CharSequence) =
-      entries.first { it.displayName.contentEquals(displayName) }
+    val default = entries.first { it.api == UbuntuToolchain.DEFAULT_PLATFORM }
 
     @JvmStatic
-    fun fromVersion(version: CharSequence) = entries.first { it.version.contentEquals(version) }
+    fun fromDisplayName(displayName: CharSequence) =
+      entries.firstOrNull { it.displayName.contentEquals(displayName) } ?: default
+
+    @JvmStatic
+    fun fromApi(api: Int) = entries.firstOrNull { it.api == api } ?: default
   }
 }
 
 /**
- * JDK versions.
+ * JDK versions offered during setup. Each maps to an Eclipse Temurin aarch64 build that the
+ * installer downloads; the selection is honoured rather than assumed.
  *
  * @author Akash Yadav
  */
@@ -64,11 +69,19 @@ enum class JdkVersion(val version: String) {
 
   companion object {
 
+    /**
+     * JDK 17 is the default: it is the minimum AGP requires, and the version the project templates
+     * target. Gradle 8.14 also runs on 21, so either choice builds.
+     */
     @JvmStatic
-    fun fromDisplayName(displayName: CharSequence) =
-      entries.first { it.displayName.contentEquals(displayName) }
+    val default = JDK_17
 
     @JvmStatic
-    fun fromVersion(version: CharSequence) = entries.first { it.version.contentEquals(version) }
+    fun fromDisplayName(displayName: CharSequence) =
+      entries.firstOrNull { it.displayName.contentEquals(displayName) } ?: default
+
+    @JvmStatic
+    fun fromVersion(version: CharSequence) =
+      entries.firstOrNull { it.version.contentEquals(version) } ?: default
   }
 }

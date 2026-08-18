@@ -544,7 +544,7 @@
   <string name="msg_finalizing_ubuntu">Configuring rootfs…</string>
   <string name="action_auto_install">Automatic installation</string>
   <string name="action_manual_install">Manual installation</string>
-  <string name="hint_android_sdk_version">Android SDK version</string>
+  <string name="hint_android_sdk_version">Android SDK platform</string>
   <string name="hin_jdk_version">JDK version</string>
   <string name="action_install_git">Install Git</string>
   <string name="action_install_openssh">Install OpenSSH</string>
