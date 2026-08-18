@@ -38,8 +38,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
-          # Only the tip is needed; the full history was costing a large clone for nothing.
-          fetch-depth: 1
+          # Full history + tags are REQUIRED: the Nyx plugin derives the version from the latest
+          # git tag. With a shallow clone it falls back to v0.1.0 and the build fails with
+          # "Cannot extract simple version name". Checkout only costs ~4s, so there is nothing
+          # to gain here anyway.
+          fetch-depth: 0
 
       - name: Set up JDK ${{ env.BUILD_JAVA_VERSION }}
         uses: actions/setup-java@v4
