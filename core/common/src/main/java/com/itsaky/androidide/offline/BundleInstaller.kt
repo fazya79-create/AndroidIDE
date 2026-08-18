@@ -20,6 +20,7 @@ package com.itsaky.androidide.offline
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.apache.commons.compress.compressors.brotli.BrotliCompressorInputStream
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.FileOutputStream
@@ -34,13 +35,12 @@ import java.util.zip.ZipInputStream
 sealed class BundlePhase {
   data object Idle : BundlePhase()
   data class Downloading(
-    val label: String,
     val percent: Int,
     val receivedMb: Double,
     val totalMb: Double
   ) : BundlePhase()
 
-  data class Extracting(val label: String, val entry: String) : BundlePhase()
+  data class Extracting(val entry: String, val count: Int) : BundlePhase()
   data object Done : BundlePhase()
   data class Failed(val message: String) : BundlePhase()
 }
@@ -71,13 +71,11 @@ class BundleInstaller(private val context: Context) {
     /** Whether every bundle entry is present for the current [OfflineBundle.VERSION]. */
     fun isInstalled(context: Context): Boolean = OfflineBundle.entries.all { entry ->
       val dest = File(context.filesDir, entry.destination)
-      marker(dest).takeIf { it.isFile }?.readText()?.trim() == OfflineBundle.VERSION
+      File(dest, MARKER_NAME).takeIf { it.isFile }?.readText()?.trim() == OfflineBundle.VERSION
     }
 
-    private fun marker(destination: File) = File(destination, MARKER_NAME)
-
     fun repositoryDir(context: Context): File =
-      File(context.filesDir, OfflineBundle.entries.first().destination)
+      File(context.filesDir, OfflineBundle.REPOSITORY_PATH)
   }
 
   suspend fun install(onProgress: (BundlePhase) -> Unit): Boolean = withContext(Dispatchers.IO) {
@@ -103,7 +101,8 @@ class BundleInstaller(private val context: Context) {
 
   private fun isEntryInstalled(entry: OfflineBundle.Entry): Boolean {
     val dest = File(context.filesDir, entry.destination)
-    return marker(dest).takeIf { it.isFile }?.readText()?.trim() == OfflineBundle.VERSION
+    return File(dest, MARKER_NAME).takeIf { it.isFile }
+      ?.readText()?.trim() == OfflineBundle.VERSION
   }
 
   /**
@@ -111,11 +110,21 @@ class BundleInstaller(private val context: Context) {
    * not fatal — verification is skipped rather than blocking the install.
    */
   private fun fetchChecksums(): Map<String, String> = runCatching {
-    openConnection(URL(OfflineBundle.checksumsUrl), rangeFrom = 0L).use { input ->
-      input.bufferedReader().lineSequence().mapNotNull { line ->
-        val parts = line.trim().split(Regex("\\s+"))
-        if (parts.size >= 2) parts[1].substringAfterLast('/') to parts[0].lowercase() else null
-      }.toMap()
+    openRangedConnection(URL(OfflineBundle.checksumsUrl), 0L).let { connection ->
+      try {
+        connection.inputStream.bufferedReader().useLines { lines ->
+          lines.mapNotNull { line ->
+            val parts = line.trim().split(Regex("\\s+"))
+            if (parts.size >= 2) {
+              parts[1].substringAfterLast('/') to parts[0].lowercase()
+            } else {
+              null
+            }
+          }.toMap()
+        }
+      } finally {
+        connection.disconnect()
+      }
     }
   }.getOrElse {
     log.warn("Could not fetch bundle checksums, skipping verification")
@@ -143,7 +152,6 @@ class BundleInstaller(private val context: Context) {
       val resumed = connection.responseCode == HttpURLConnection.HTTP_PARTIAL
       val remaining = connection.contentLengthLong
       val total = if (resumed && remaining > 0) existing + remaining else remaining
-      val startedAt = if (resumed) existing else 0L
 
       if (!resumed && existing > 0) {
         log.info("Server ignored the range request, restarting {}", entry.fileName)
@@ -153,7 +161,13 @@ class BundleInstaller(private val context: Context) {
       try {
         FileOutputStream(part, resumed).use { out ->
           connection.inputStream.use { input ->
-            copyReportingProgress(input, out, entry.label, startedAt, total, onProgress)
+            copyReportingProgress(
+              input = input,
+              out = out,
+              startedAt = if (resumed) existing else 0L,
+              total = total,
+              onProgress = onProgress
+            )
           }
         }
       } finally {
@@ -182,7 +196,6 @@ class BundleInstaller(private val context: Context) {
   private fun copyReportingProgress(
     input: InputStream,
     out: FileOutputStream,
-    label: String,
     startedAt: Long,
     total: Long,
     onProgress: (BundlePhase) -> Unit
@@ -202,7 +215,6 @@ class BundleInstaller(private val context: Context) {
         lastPercent = percent
         onProgress(
           BundlePhase.Downloading(
-            label = label,
             percent = percent,
             receivedMb = received / (1024.0 * 1024.0),
             totalMb = total / (1024.0 * 1024.0)
@@ -218,46 +230,52 @@ class BundleInstaller(private val context: Context) {
     onProgress: (BundlePhase) -> Unit
   ) {
     val dest = File(context.filesDir, entry.destination)
-    if (!entry.isArchive) {
-      dest.parentFile?.mkdirs()
-      archive.copyTo(dest, overwrite = true)
-      marker(dest.parentFile ?: dest).writeText(OfflineBundle.VERSION)
-      return
-    }
-
     dest.deleteRecursively()
     dest.mkdirs()
     val root = dest.canonicalPath
+    var count = 0
 
-    ZipInputStream(archive.inputStream().buffered(BUFFER_SIZE)).use { zip ->
-      while (true) {
-        if (cancelled.get()) throw BundleCancelledException()
-        val zipEntry = zip.nextEntry ?: break
-        val name = zipEntry.name.replace('\\', '/').trimStart('/')
-        if (name.isBlank() || name.split('/').any { it == ".." }) {
+    openArchive(entry, archive).use { source ->
+      ZipInputStream(source).use { zip ->
+        while (true) {
+          if (cancelled.get()) throw BundleCancelledException()
+          val zipEntry = zip.nextEntry ?: break
+          val name = zipEntry.name.replace('\\', '/').trimStart('/')
+          if (name.isBlank() || name.split('/').any { it == ".." }) {
+            zip.closeEntry()
+            continue
+          }
+
+          val target = File(dest, name)
+          // Zip-slip guard: a crafted entry name must not escape the destination.
+          if (!target.canonicalPath.startsWith(root)) {
+            zip.closeEntry()
+            continue
+          }
+
+          if (zipEntry.isDirectory) {
+            target.mkdirs()
+          } else {
+            target.parentFile?.mkdirs()
+            FileOutputStream(target).use { out -> zip.copyTo(out, BUFFER_SIZE) }
+            count++
+            onProgress(BundlePhase.Extracting(name.substringAfterLast('/'), count))
+          }
           zip.closeEntry()
-          continue
         }
-
-        val target = File(dest, name)
-        // Zip-slip guard: a crafted entry name must not escape the destination.
-        if (!target.canonicalPath.startsWith(root)) {
-          zip.closeEntry()
-          continue
-        }
-
-        if (zipEntry.isDirectory) {
-          target.mkdirs()
-        } else {
-          target.parentFile?.mkdirs()
-          FileOutputStream(target).use { out -> zip.copyTo(out, BUFFER_SIZE) }
-          onProgress(BundlePhase.Extracting(entry.label, name.substringAfterLast('/')))
-        }
-        zip.closeEntry()
       }
     }
 
-    marker(dest).writeText(OfflineBundle.VERSION)
+    if (count == 0) {
+      throw IllegalStateException("Bundle archive was empty")
+    }
+
+    File(dest, MARKER_NAME).writeText(OfflineBundle.VERSION)
+  }
+
+  private fun openArchive(entry: OfflineBundle.Entry, archive: File): InputStream {
+    val raw = archive.inputStream().buffered(BUFFER_SIZE)
+    return if (entry.isBrotli) BrotliCompressorInputStream(raw) else raw
   }
 
   private fun openRangedConnection(url: URL, from: Long): HttpURLConnection {
@@ -288,9 +306,6 @@ class BundleInstaller(private val context: Context) {
     }
     throw IllegalStateException("Too many redirects")
   }
-
-  private fun openConnection(url: URL, rangeFrom: Long): InputStream =
-    openRangedConnection(url, rangeFrom).inputStream
 
   private fun sha256(file: File): String {
     val digest = MessageDigest.getInstance("SHA-256")

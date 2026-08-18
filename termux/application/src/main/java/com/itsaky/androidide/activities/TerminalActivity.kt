@@ -67,7 +67,6 @@ class TerminalActivity : TermuxActivity() {
     private const val KEY_TERMINAL_CAN_ADD_SESSIONS = "ide.terminal.sessions.canAddSessions"
 
     const val EXTRA_ONBOARDING_RUN_IDESETUP = "ide.onboarding.terminal.runIdesetup"
-    const val EXTRA_ONBOARDING_RUN_IDESETUP_ARGS = "ide.onboarding.terminal.runIdesetup.args"
 
     /** Shell name of the session that installs the build toolchain. */
     const val SETUP_SESSION_NAME = "IDE setup"
@@ -187,13 +186,9 @@ class TerminalActivity : TermuxActivity() {
     existingSession: TermuxSession?,
     launchFailsafe: Boolean
   ) {
-    if (intent != null) {
-      val runIdesetup = intent.getBooleanExtra(EXTRA_ONBOARDING_RUN_IDESETUP, false)
-      val runIdesetupArgs = intent.getStringArrayExtra(EXTRA_ONBOARDING_RUN_IDESETUP_ARGS)
-      if (runIdesetup && !runIdesetupArgs.isNullOrEmpty()) {
-        addIdesetupSession(runIdesetupArgs)
-        return
-      }
+    if (intent?.getBooleanExtra(EXTRA_ONBOARDING_RUN_IDESETUP, false) == true) {
+      addIdesetupSession()
+      return
     }
 
     super.setupTermuxSessionOnServiceConnected(
@@ -209,8 +204,8 @@ class TerminalActivity : TermuxActivity() {
    * Installs the Ubuntu rootfs (if needed) and starts a session running the toolchain
    * installer inside it. Replaces the old `idesetup.sh` flow, whose apt repository is dead.
    */
-  private fun addIdesetupSession(args: Array<String>) {
-    log.debug("Starting Ubuntu toolchain setup, ignored legacy args: {}", args.joinToString(" "))
+  private fun addIdesetupSession() {
+    log.debug("Starting Ubuntu toolchain setup")
 
     val progress = MaterialAlertDialogBuilder(this)
       .setTitle(R.string.title_installing_ubuntu)

@@ -237,16 +237,28 @@ jobs:
       - name: Zip the repository with stored (uncompressed) entries
         run: |
           # Jars stay uncompressed so Gradle can mmap them on device; the outer zip is stored too
-          # because its contents are already-compressed archives.
+          # so the Brotli pass below sees the raw bytes instead of already-deflated streams.
           cd localMvnRepository
           zip -0 -q -r ../localMvnRepository.zip .
           cd ..
           ls -la localMvnRepository.zip
           du -sh localMvnRepository
 
+      - name: Brotli-compress the archive
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq brotli
+          # -q 11 is the slowest/densest setting; this runs once in CI and every user pays the
+          # download, so the trade is worth it. The app decompresses with commons-compress.
+          brotli -q 11 -f -o localMvnRepository.zip.br localMvnRepository.zip
+          raw=$(stat -c%s localMvnRepository.zip)
+          comp=$(stat -c%s localMvnRepository.zip.br)
+          echo "raw=$raw compressed=$comp"
+          python3 -c "print(f'saved {100 - $comp * 100 / $raw:.1f}%')"
+
       - name: Publish checksums
         run: |
-          sha256sum localMvnRepository.zip | tee checksums.txt
+          sha256sum localMvnRepository.zip.br | tee checksums.txt
 
       - name: Summarize
         run: |
@@ -260,6 +272,7 @@ jobs:
             echo "| Kotlin | ${KOTLIN_VERSION} |"
             echo "| artifacts | $(find localMvnRepository -type f | wc -l) |"
             echo "| archive | $(du -h localMvnRepository.zip | cut -f1) |"
+            echo "| download | $(du -h localMvnRepository.zip.br | cut -f1) |"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload to the release
@@ -272,5 +285,5 @@ jobs:
               --title "Offline dependency bundle" \
               --notes "Maven repository harvested for AGP ${AGP_VERSION}, Gradle ${GRADLE_VERSION}, Kotlin ${KOTLIN_VERSION}."
 
-          gh release upload "$TAG" localMvnRepository.zip checksums.txt \
+          gh release upload "$TAG" localMvnRepository.zip.br checksums.txt \
             --repo "$GITHUB_REPOSITORY" --clobber

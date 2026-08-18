@@ -30,25 +30,30 @@ import android.net.NetworkRequest
 import android.os.Bundle
 import android.provider.Settings
 import android.text.Html
-import android.text.Spannable
-import android.text.SpannableStringBuilder
-import android.text.style.URLSpan
 import android.view.ViewGroup
-import android.widget.ArrayAdapter
 import androidx.core.content.getSystemService
 import androidx.core.view.isVisible
+import androidx.lifecycle.lifecycleScope
 import com.github.appintro.SlidePolicy
 import com.itsaky.androidide.R
 import com.itsaky.androidide.databinding.LayoutOnboardngSetupConfigBinding
-import com.itsaky.androidide.models.IdeSetupArgument
+import com.itsaky.androidide.offline.BundleInstaller
+import com.itsaky.androidide.offline.BundlePhase
 import com.itsaky.androidide.resources.R.string
 import com.itsaky.androidide.tasks.runOnUiThread
 import com.itsaky.androidide.utils.ConnectionInfo
-import com.itsaky.androidide.utils.Environment
 import com.itsaky.androidide.utils.flashError
 import com.itsaky.androidide.utils.getConnectionInfo
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 /**
+ * Downloads the prebuilt offline dependency bundle.
+ *
+ * This replaces the old SDK/JDK version pickers. Those versions are no longer a user choice: the
+ * bundle is harvested for one pinned AGP/Gradle/Kotlin combination, and the toolchain itself is
+ * installed into the Ubuntu rootfs by the terminal step that follows.
+ *
  * @author Akash Yadav
  */
 class IdeSetupConfigurationFragment : OnboardingFragment(), SlidePolicy {
@@ -60,18 +65,27 @@ class IdeSetupConfigurationFragment : OnboardingFragment(), SlidePolicy {
   private var backgroundDataRestrictionReceiver: BroadcastReceiver? = null
   private var networkStateChangeCallback: NetworkCallback? = null
 
+  private var installer: BundleInstaller? = null
+  private var installJob: Job? = null
+
   companion object {
 
     @JvmStatic
     fun newInstance(context: Context): IdeSetupConfigurationFragment {
       return IdeSetupConfigurationFragment().also {
         it.arguments = Bundle().apply {
-          putCharSequence(KEY_ONBOARDING_TITLE, context.getString(R.string.title_install_tools))
-          putCharSequence(KEY_ONBOARDING_SUBTITLE,
-            context.getString(R.string.subtitle_install_tools))
-          putCharSequence(KEY_ONBOARDING_EXTRA_INFO,
-            Html.fromHtml(context.getString(R.string.msg_install_tools),
-              Html.FROM_HTML_MODE_COMPACT))
+          putCharSequence(KEY_ONBOARDING_TITLE, context.getString(R.string.title_offline_bundle))
+          putCharSequence(
+            KEY_ONBOARDING_SUBTITLE,
+            context.getString(R.string.subtitle_offline_bundle)
+          )
+          putCharSequence(
+            KEY_ONBOARDING_EXTRA_INFO,
+            Html.fromHtml(
+              context.getString(R.string.msg_offline_bundle),
+              Html.FROM_HTML_MODE_COMPACT
+            )
+          )
         }
       }
     }
@@ -87,62 +101,82 @@ class IdeSetupConfigurationFragment : OnboardingFragment(), SlidePolicy {
       meteredConnection.root.setText(R.string.msg_connected_to_metered_connection)
       backgroundDataRestricted.root.setText(R.string.msg_disable_background_data_restriction)
 
-      autoInstallSwitch.setOnCheckedChangeListener { button, isChecked ->
-        button.setText(
-          if (isChecked) R.string.action_auto_install else R.string.action_manual_install)
-        sdkVersionLayout.isEnabled = isChecked
-        jdkVersionLayout.isEnabled = isChecked
-        installGit.isEnabled = isChecked
-        installOpenssh.isEnabled = isChecked
-      }
-
-      val sdkVersions = SdkVersion.entries.map { "SDK ${it.version}" }.reversed()
-      sdkVersion.setText(sdkVersions[0])
-      sdkVersion.setAdapter(ArrayAdapter(
-        requireContext(),
-        com.google.android.material.R.layout.m3_auto_complete_simple_item,
-        sdkVersions)
-      )
-
-      val jdkVersions = JdkVersion.entries.map { "JDK ${it.version}" }
-      jdkVersion.setText(jdkVersions[0])
-      jdkVersion.setAdapter(ArrayAdapter(
-        requireContext(),
-        com.google.android.material.R.layout.m3_auto_complete_simple_item,
-        jdkVersions)
-      )
+      downloadAction.setOnClickListener { toggleInstall() }
     }
 
+    updateInstalledState()
     updateConnectionStatus()
   }
 
-  fun isAutoInstall(): Boolean = content.autoInstallSwitch.isChecked
+  /** Whether the bundle is present, i.e. whether onboarding may advance. */
+  fun isBundleInstalled(): Boolean = BundleInstaller.isInstalled(requireContext())
 
-  fun buildIdeSetupArguments(): Array<String> {
-    val args = mutableListOf<String>()
-    args.setArgument(IdeSetupArgument.INSTALL_DIR, Environment.HOME.absolutePath)
-    args.setArgument(IdeSetupArgument.SDK_VERSION,
-      SdkVersion.fromDisplayName(content.sdkVersion.text).version)
-    args.setArgument(IdeSetupArgument.JDK_VERSION,
-      JdkVersion.fromDisplayName(content.jdkVersion.text).version)
-    args.setArgument(IdeSetupArgument.ASSUME_YES)
-    if (content.installGit.isChecked) {
-      args.setArgument(IdeSetupArgument.WITH_GIT)
+  private fun toggleInstall() {
+    if (installJob?.isActive == true) {
+      installer?.cancel()
+      return
     }
-    if (content.installOpenssh.isChecked) {
-      args.setArgument(IdeSetupArgument.WITH_OPENSSH)
-    }
-    return args.toTypedArray()
+    startInstall()
   }
 
-  private fun MutableList<String>.setArgument(argument: IdeSetupArgument, value: Any? = null) {
-    val strVal = value?.toString() ?: ""
-    if (argument.requiresValue && strVal.isBlank()) {
-      throw IllegalArgumentException("${argument.name} requires a value")
-    }
+  private fun startInstall() {
+    val installer = BundleInstaller(requireContext()).also { this.installer = it }
 
-    add(argument.argumentName)
-    add(strVal)
+    content.downloadAction.setText(android.R.string.cancel)
+    content.bundleProgress.isVisible = true
+    content.bundleProgress.isIndeterminate = true
+    content.bundleStatus.setText(R.string.msg_preparing)
+
+    installJob = viewLifecycleOwner.lifecycleScope.launch {
+      installer.install { phase -> runOnUiThread { render(phase) } }
+      installJob = null
+      runOnUiThread { updateInstalledState() }
+    }
+  }
+
+  private fun render(phase: BundlePhase) {
+    if (_content == null) return
+
+    when (phase) {
+      is BundlePhase.Idle -> Unit
+
+      is BundlePhase.Downloading -> content.apply {
+        bundleProgress.isIndeterminate = false
+        bundleProgress.progress = phase.percent
+        bundleStatus.text = getString(
+          R.string.msg_downloading_bundle,
+          phase.percent,
+          phase.receivedMb.toInt(),
+          phase.totalMb.toInt()
+        )
+      }
+
+      is BundlePhase.Extracting -> content.apply {
+        bundleProgress.isIndeterminate = true
+        bundleStatus.text = getString(R.string.msg_extracting_bundle, phase.entry)
+      }
+
+      is BundlePhase.Done -> content.bundleStatus.setText(R.string.msg_bundle_ready)
+
+      is BundlePhase.Failed -> {
+        content.bundleStatus.text = phase.message
+        flashError(phase.message)
+      }
+    }
+  }
+
+  private fun updateInstalledState() {
+    val installed = isBundleInstalled()
+    content.apply {
+      bundleProgress.isVisible = !installed && installJob?.isActive == true
+      downloadAction.isVisible = !installed
+      if (installed) {
+        bundleStatus.setText(R.string.msg_bundle_ready)
+      } else if (installJob?.isActive != true) {
+        bundleStatus.setText(R.string.msg_bundle_required)
+        downloadAction.setText(R.string.action_download_bundle)
+      }
+    }
   }
 
   override fun onStart() {
@@ -160,6 +194,8 @@ class IdeSetupConfigurationFragment : OnboardingFragment(), SlidePolicy {
     updateConnectionStatus(getConnectionInfo(requireContext(), networkCapabilities))
 
   private fun updateConnectionStatus(connectionInfo: ConnectionInfo) = runOnUiThread {
+    if (_content == null) return@runOnUiThread
+
     content.noConnection.root.isVisible = false
     content.cellularConnection.root.isVisible = false
     content.meteredConnection.root.isVisible = false
@@ -205,12 +241,6 @@ class IdeSetupConfigurationFragment : OnboardingFragment(), SlidePolicy {
   }
 
   private fun showNoConnectionWarning() {
-    val msg = SpannableStringBuilder(getString(R.string.msg_no_internet))
-    msg.append(" ")
-    msg.append(getString(R.string.action_open_settings), URLSpan(""),
-      Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-    )
-
     content.noConnection.root.apply {
       isVisible = true
       setOnClickListener {
@@ -221,12 +251,16 @@ class IdeSetupConfigurationFragment : OnboardingFragment(), SlidePolicy {
 
   override fun onDestroyView() {
     super.onDestroyView()
+    installer?.cancel()
+    installJob = null
+    installer = null
+    _content = null
     backgroundDataRestrictionReceiver = null
     networkStateChangeCallback = null
   }
 
   override val isPolicyRespected: Boolean
-    get() = getConnectionInfo(requireContext()).isConnected
+    get() = isBundleInstalled() || getConnectionInfo(requireContext()).isConnected
 
   override fun onUserIllegallyRequestedNextPage() {
     flashError(string.msg_no_internet)
@@ -263,7 +297,8 @@ class IdeSetupConfigurationFragment : OnboardingFragment(), SlidePolicy {
     backgroundDataRestrictionReceiver?.also {
       try {
         requireContext().unregisterReceiver(it)
-      } catch (err: Throwable) { /*ignored*/
+      } catch (err: Throwable) {
+        // not registered
       }
     }
 
@@ -273,8 +308,10 @@ class IdeSetupConfigurationFragment : OnboardingFragment(), SlidePolicy {
       }
     }
 
-    requireContext().registerReceiver(backgroundDataRestrictionReceiver!!,
-      IntentFilter(ConnectivityManager.ACTION_RESTRICT_BACKGROUND_CHANGED))
+    requireContext().registerReceiver(
+      backgroundDataRestrictionReceiver!!,
+      IntentFilter(ConnectivityManager.ACTION_RESTRICT_BACKGROUND_CHANGED)
+    )
   }
 
   private fun removeNetworkMonitors() {
@@ -288,5 +325,4 @@ class IdeSetupConfigurationFragment : OnboardingFragment(), SlidePolicy {
       backgroundDataRestrictionReceiver = null
     }
   }
-
 }

@@ -58,6 +58,9 @@ common-javaparser = { module = "com.github.javaparser:javaparser-symbol-solver-c
 common-lang3 = { module = "org.apache.commons:commons-lang3", version = "3.14.0" }
 common-io = { module = "commons-io:commons-io", version = "2.15.1" }
 common-compress = { module = "org.apache.commons:commons-compress", version = "1.26.2" }
+# Pure-Java Brotli decoder backing commons-compress's BrotliCompressorInputStream. Chosen over
+# brotli4j, which needs a hand-compiled libbrotli.so per Android ABI.
+common-brotli-dec = { module = "org.brotli:dec", version = "0.1.2" }
 common-kotlin = { module = "org.jetbrains.kotlin:kotlin-stdlib-jdk8", version.ref = "kotlin" }
 common-kotlin-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlin-coroutines" }
 common-jkotlin = { module = "org.jetbrains.kotlin:kotlin-stdlib-jdk8", version.ref = "kotlin" }

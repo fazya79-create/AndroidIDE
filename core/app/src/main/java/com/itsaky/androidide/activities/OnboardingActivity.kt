@@ -158,12 +158,14 @@ class OnboardingActivity : AppIntro2() {
     }
 
     if (!checkToolsIsInstalled() && currentFragment is IdeSetupConfigurationFragment) {
-      val intent = Intent(this, TerminalActivity::class.java)
-      if (currentFragment.isAutoInstall()) {
-        intent.putExtra(TerminalActivity.EXTRA_ONBOARDING_RUN_IDESETUP, true)
-        intent.putExtra(TerminalActivity.EXTRA_ONBOARDING_RUN_IDESETUP_ARGS,
-          currentFragment.buildIdeSetupArguments())
+      // The bundle download is a prerequisite: without it every build would hit the network.
+      if (!currentFragment.isBundleInstalled()) {
+        flashError(string.msg_bundle_required)
+        return
       }
+
+      val intent = Intent(this, TerminalActivity::class.java)
+      intent.putExtra(TerminalActivity.EXTRA_ONBOARDING_RUN_IDESETUP, true)
       terminalActivityCallback.launch(intent)
       return
     }
