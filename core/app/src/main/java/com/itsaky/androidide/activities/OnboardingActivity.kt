@@ -39,6 +39,7 @@ import com.itsaky.androidide.preferences.internal.StatPreferences
 import com.itsaky.androidide.preferences.internal.prefManager
 import com.itsaky.androidide.tasks.launchAsyncWithProgress
 import com.itsaky.androidide.ui.themes.IThemeManager
+import com.itsaky.androidide.offline.BundleInstaller
 import com.itsaky.androidide.utils.Environment
 import com.itsaky.androidide.utils.flashError
 import com.termux.shared.android.PackageUtils
@@ -158,25 +159,39 @@ class OnboardingActivity : AppIntro2() {
       return
     }
 
-    if (!checkToolsIsInstalled() && currentFragment is IdeSetupConfigurationFragment) {
+    if (currentFragment is IdeSetupConfigurationFragment) {
       // The bundle download is a prerequisite: without it every build would hit the network.
       if (!currentFragment.isBundleInstalled()) {
         flashError(string.msg_bundle_required)
         return
       }
 
-      val intent = Intent(this, TerminalActivity::class.java)
-      intent.putExtra(TerminalActivity.EXTRA_ONBOARDING_RUN_IDESETUP, true)
-      terminalActivityCallback.launch(intent)
-      return
+      // Only the toolchain needs the terminal; when it is already installed the bundle was the
+      // only missing piece and setup is complete.
+      if (!isToolchainInstalled()) {
+        val intent = Intent(this, TerminalActivity::class.java)
+        intent.putExtra(TerminalActivity.EXTRA_ONBOARDING_RUN_IDESETUP, true)
+        terminalActivityCallback.launch(intent)
+        return
+      }
     }
 
     tryNavigateToMainIfSetupIsCompleted()
   }
 
-  private fun checkToolsIsInstalled(): Boolean {
+  /** Whether the JDK and Android SDK are present inside the rootfs. */
+  private fun isToolchainInstalled(): Boolean {
     return IJdkDistributionProvider.getInstance().installedDistributions.isNotEmpty()
         && Environment.ANDROID_HOME.exists()
+  }
+
+  /**
+   * The bundle is part of a complete setup: without it every build would need the network, which
+   * is exactly what the offline mode exists to avoid. Onboarding therefore shows its slide until
+   * the bundle is installed, even when the toolchain itself is already present.
+   */
+  private fun checkToolsIsInstalled(): Boolean {
+    return isToolchainInstalled() && BundleInstaller.isInstalled(this)
   }
 
   private fun isSetupCompleted(): Boolean {

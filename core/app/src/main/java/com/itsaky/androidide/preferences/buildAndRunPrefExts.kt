@@ -74,6 +74,7 @@ private class GradleOptions(
     addPreference(GradleCommands())
     addPreference(GradleDistrubution())
     addPreference(GradleJDKVersionPreference())
+    addPreference(OfflineBundlePreference())
     addPreference(GradleClearCache())
   }
 }

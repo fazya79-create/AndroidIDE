@@ -563,4 +563,8 @@
   <string name="msg_extracting_bundle">Extracting %1$s</string>
   <string name="msg_bundle_ready">Dependency bundle installed.</string>
   <string name="action_download_bundle">Download</string>
+  <string name="idepref_offlineBundle_title">Offline dependency bundle</string>
+  <string name="idepref_offlineBundle_summary">Prebuilt Maven repository used for offline builds</string>
+  <string name="msg_bundle_reinstall">The bundle is already installed. Download it again?</string>
+  <string name="msg_bundle_failed">Could not install the dependency bundle.</string>
 </resources>
