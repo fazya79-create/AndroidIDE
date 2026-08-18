@@ -89,16 +89,17 @@ private class SdkManagerPreference(
   override val key: String = "idepref_build_sdkManager",
   override val title: Int = string.title_sdk_manager,
   override val icon: Int? = drawable.ic_android,
-) : SimpleClickablePreference() {
+) : SimplePreference() {
 
   override fun onCreatePreference(context: Context): Preference {
-    return super.onCreatePreference(context).also { updateSummary(it) }
+    return super.onCreatePreference(context).also {
+      it.isSelectable = true
+      updateSummary(it)
+    }
   }
 
   override fun onPreferenceClick(preference: Preference): Boolean {
-    preference.context.startActivity(
-      Intent(preference.context, SdkManagerActivity::class.java)
-    )
+    preference.context.startActivity(Intent(preference.context, SdkManagerActivity::class.java))
     return true
   }
 
