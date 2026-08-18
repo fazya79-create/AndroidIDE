@@ -36,7 +36,7 @@ object OfflineBundle {
   const val VERSION = "offline-bundle-v3"
 
   /** Release tag holding the JDK, Android SDK and Gradle archives. */
-  const val TOOLCHAIN_VERSION = "toolchain-v1"
+  const val TOOLCHAIN_VERSION = "toolchain-v2"
 
   private const val REPO_BASE =
     "https://github.com/fazya79-create/AndroidIDE/releases/download"

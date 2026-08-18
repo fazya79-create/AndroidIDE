@@ -14,7 +14,7 @@ on:
       tag:
         description: 'Release tag to publish the toolchain under'
         required: true
-        default: 'toolchain-v1'
+        default: 'toolchain-v2'
 
 permissions:
   contents: write
