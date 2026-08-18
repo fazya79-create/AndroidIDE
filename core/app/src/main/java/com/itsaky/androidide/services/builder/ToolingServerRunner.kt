@@ -76,6 +76,10 @@ internal class ToolingServerRunner(
     try {
       log.info("Starting tooling API server...")
       val jvmArgs = listOf(
+        // The tooling server only builds and forwards project models; the actual build runs in a
+        // separate Gradle daemon. Without a cap the JVM sizes its heap from total device RAM and
+        // then competes with that daemon, which on a 3-4 GB phone means swapping.
+        "-Xmx256m", "-XX:MaxMetaspaceSize=192m", "-XX:+UseSerialGC",
         // Allow reflective access to private members of classes in the following
         // packages:
         // - java.lang
