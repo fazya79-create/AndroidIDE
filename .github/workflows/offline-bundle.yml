@@ -12,7 +12,7 @@ on:
       tag:
         description: 'Release tag to publish the bundle under'
         required: true
-        default: 'offline-bundle-v1'
+        default: 'offline-bundle-v2'
 
 permissions:
   contents: write
