@@ -28,20 +28,28 @@ import com.itsaky.androidide.actions.BaseBuildAction
 import com.itsaky.androidide.actions.getContext
 import com.itsaky.androidide.actions.markInvisible
 import com.itsaky.androidide.actions.openApplicationModuleChooser
+import com.itsaky.androidide.activities.editor.EditorHandlerActivity
 import com.itsaky.androidide.lookup.Lookup
+import com.itsaky.androidide.projects.IProjectManager
 import com.itsaky.androidide.models.ApkMetadata
 import com.itsaky.androidide.projects.android.AndroidModule
 import com.itsaky.androidide.projects.builder.BuildService
 import com.itsaky.androidide.resources.R
 import com.itsaky.androidide.tooling.api.messages.result.TaskExecutionResult
 import com.itsaky.androidide.tooling.api.models.BasicAndroidVariantMetadata
+import com.itsaky.androidide.tasks.runOnUiThread
 import com.itsaky.androidide.utils.ApkInstaller
+import com.itsaky.androidide.utils.DialogUtils
 import com.itsaky.androidide.utils.InstallationResultHandler
+import com.itsaky.androidide.utils.NativeBuildSetup
 import com.itsaky.androidide.utils.flashError
+import com.itsaky.androidide.utils.getConnectionInfo
 import com.itsaky.androidide.utils.resolveAttr
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
 import org.slf4j.LoggerFactory
 import java.io.File
 
@@ -106,7 +114,74 @@ class QuickRunWithCancellationAction(context: Context, override val order: Int) 
       return cancelBuild()
     }
 
+    // A native project cannot build without the NDK, and the failure Gradle reports for a missing
+    // one is unhelpful. Offer to fetch it here, reporting into the build output so the user stays
+    // in the editor.
+    if (!ensureNativeBuildSystem(data)) {
+      return true
+    }
+
     return quickRun(data)
+  }
+
+  /**
+   * Installs the NDK and CMake when the project needs them, after asking once.
+   *
+   * @return true when the build may proceed.
+   */
+  private suspend fun ensureNativeBuildSystem(data: ActionData): Boolean {
+    val activity = data.getActivity() ?: return true
+    val projectDir = IProjectManager.getInstance().projectDir
+
+    val missing = withContext(Dispatchers.IO) {
+      NativeBuildSetup.findMissing(activity, projectDir)
+    }
+    if (missing.isEmpty) return true
+
+    if (!confirmDownload(activity, missing)) {
+      activity.appendBuildOutput(activity.getString(string.msg_native_setup_declined))
+      return false
+    }
+
+    val installed = NativeBuildSetup.install(activity, missing) { line ->
+      runOnUiThread { activity.appendBuildOutput(line) }
+    }
+
+    if (!installed) {
+      flashError(string.msg_native_install_failed)
+    }
+    return installed
+  }
+
+  /** Asks before starting a download this large, noting a metered connection. */
+  private suspend fun confirmDownload(
+    activity: EditorHandlerActivity,
+    missing: NativeBuildSetup.Missing
+  ): Boolean = suspendCancellableCoroutine { continuation ->
+    val connection = getConnectionInfo(activity)
+    val message = activity.getString(
+      if (connection.isMeteredConnection || connection.isCellularTransport) {
+        string.msg_native_setup_metered
+      } else {
+        string.msg_native_setup_needed
+      },
+      missing.describe(),
+      missing.totalMb
+    )
+
+    DialogUtils.newMaterialDialogBuilder(activity)
+      .setTitle(string.title_native_setup_needed)
+      .setMessage(message)
+      .setCancelable(false)
+      .setNegativeButton(android.R.string.cancel) { dialog, _ ->
+        dialog.dismiss()
+        if (continuation.isActive) continuation.resume(false)
+      }
+      .setPositiveButton(string.action_download) { dialog, _ ->
+        dialog.dismiss()
+        if (continuation.isActive) continuation.resume(true)
+      }
+      .show()
   }
 
   private fun quickRun(data: ActionData): Boolean {

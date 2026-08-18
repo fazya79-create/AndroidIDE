@@ -190,6 +190,7 @@
   <string name="msg_native_setup_metered">%1$s\n\nTotal %2$d MB. You are on a metered connection.</string>
   <string name="action_download">Download</string>
   <string name="msg_native_setup_declined">Native build requires the NDK. Settings › Build &amp; Run › SDK Manager.</string>
+  <string name="msg_native_ready">Native build system ready</string>
   <string name="msg_native_setting_up">Setting up native build system</string>
   <string name="idepref_build_title">Build &amp; Run</string>
   <string name="title_open_projects">Open last project</string>
