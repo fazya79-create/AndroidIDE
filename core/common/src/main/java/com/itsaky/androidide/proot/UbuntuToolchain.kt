@@ -45,7 +45,12 @@ object UbuntuToolchain {
   const val GRADLE_VERSION = "8.8"
   const val SDK_RELEASE = "36.0.2"
   const val BUILD_TOOLS = "36.1.0"
-  const val DEFAULT_PLATFORM = 34
+  /**
+   * Must equal `COMPILE_SDK_VERSION` in `templates-api`'s constants (Tiramisu = 33). Installing a
+   * different level makes every generated project fail with
+   * "Failed to find target with hash string 'android-NN'".
+   */
+  const val DEFAULT_PLATFORM = 33
 
   private const val SDK_URL =
     "https://github.com/HomuHomu833/android-sdk-custom/releases/download/" +
