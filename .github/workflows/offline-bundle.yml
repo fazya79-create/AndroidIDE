@@ -12,7 +12,7 @@ on:
       tag:
         description: 'Release tag to publish the bundle under'
         required: true
-        default: 'offline-bundle-v2'
+        default: 'offline-bundle-v3'
 
 permissions:
   contents: write
@@ -214,6 +214,11 @@ jobs:
           # The on-device init script pulls in AndroidIDE's gradle-plugin before any project code
           # runs. Resolving it here is what stops an offline build failing with
           # "No cached version of com.itsaky.androidide:gradle-plugin available for offline mode".
+          #
+          # This MUST use its own Gradle home. Sharing one with the template resolution lets
+          # Gradle's conflict resolution upgrade the plugin's transitive dependencies to the
+          # template's versions — kotlin-stdlib 1.9.21 became 1.9.22 and was never downloaded,
+          # so on device (where this classpath resolves alone) the exact version was missing.
           cat > harvest-init.gradle.kts <<EOF
           initscript {
               repositories {
@@ -226,38 +231,160 @@ jobs:
           }
           EOF
 
-          "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home" \
+          "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home-init" \
             --init-script harvest-init.gradle.kts help
+
+      - name: Harvest the exact declared versions of every dependency
+        working-directory: probe
+        run: |
+          GRADLE="$PWD/gradle-${GRADLE_VERSION}/bin/gradle"
+
+          # Conflict resolution means the *resolved* graph is not the same as the set of versions
+          # that were requested. On device the init-script classpath resolves in isolation, so it
+          # needs the versions its metadata declares verbatim — not whatever this build upgraded
+          # them to. Read them straight out of the published Gradle module metadata.
+          python3 - <<'PY'
+          import json, urllib.request
+
+          version = "${{ env.IDE_PLUGIN_VERSION }}"
+          base = "https://repo1.maven.org/maven2/com/itsaky/androidide"
+          coords, seen = [], set()
+
+          for artifact in ("gradle-plugin", "gradle-plugin-config", "build-info"):
+              url = f"{base}/{artifact}/{version}/{artifact}-{version}.module"
+              try:
+                  meta = json.load(urllib.request.urlopen(url, timeout=60))
+              except Exception as exc:
+                  print(f"skip {artifact}: {exc}")
+                  continue
+              for variant in meta.get("variants", []):
+                  for dep in variant.get("dependencies", []):
+                      requires = dep.get("version", {}).get("requires")
+                      if not requires:
+                          continue
+                      coord = f"{dep['group']}:{dep['module']}:{requires}"
+                      if coord not in seen:
+                          seen.add(coord)
+                          coords.append(coord)
+
+          with open("exact-deps.txt", "w") as handle:
+              handle.write("\n".join(coords) + "\n")
+          print(f"{len(coords)} declared coordinates")
+          for coord in coords:
+              print(" ", coord)
+          PY
+
+          mkdir -p exact
+          cat > exact/settings.gradle.kts <<'EOF'
+          rootProject.name = "exact"
+          EOF
+
+          # `isTransitive = true` so each declared version brings its own dependency closure, and
+          # a per-coordinate `force` stops Gradle upgrading them again inside this build.
+          {
+            echo 'plugins { base }'
+            echo 'repositories { google(); mavenCentral(); gradlePluginPortal() }'
+            echo 'val fetch by configurations.creating {'
+            echo '    isTransitive = true'
+            echo '    resolutionStrategy {'
+            while read -r coord; do
+              [ -z "$coord" ] && continue
+              echo "        force(\"$coord\")"
+            done < exact-deps.txt
+            echo '    }'
+            echo '}'
+            echo 'dependencies {'
+            while read -r coord; do
+              [ -z "$coord" ] && continue
+              echo "    fetch(\"$coord\")"
+            done < exact-deps.txt
+            echo '}'
+            echo 'tasks.register("fetchAll") { doLast { fetch.resolve().forEach { println(it.name) } } }'
+          } > exact/build.gradle.kts
+
+          "$GRADLE" --no-daemon --gradle-user-home "$PWD/gradle-home-init" \
+            -p exact fetchAll
 
       - name: Convert the module cache into a Maven repository layout
         run: |
           python3 - <<'PY'
-          import os, shutil
+          import shutil
           from pathlib import Path
 
-          cache = Path("probe/gradle-home/caches/modules-2/files-2.1")
+          # Both Gradle homes must be merged: the template's, and the isolated one holding the
+          # init-script classpath at its exact declared versions.
+          caches = [
+              Path("probe/gradle-home/caches/modules-2/files-2.1"),
+              Path("probe/gradle-home-init/caches/modules-2/files-2.1"),
+          ]
           out = Path("localMvnRepository")
           keep = {".jar", ".aar", ".pom", ".module", ".klib"}
           copied = 0
 
           # Cache layout: files-2.1/<group>/<artifact>/<version>/<sha1>/<file>
           # Maven layout:  <group as dirs>/<artifact>/<version>/<file>
-          for path in cache.rglob("*"):
-              if not path.is_file() or path.suffix.lower() not in keep:
+          for cache in caches:
+              if not cache.is_dir():
+                  print(f"missing cache: {cache}")
                   continue
-              rel = path.relative_to(cache).parts
-              if len(rel) < 5:
-                  continue
-              group, artifact, version = rel[0], rel[1], rel[2]
-              target = out.joinpath(*group.split("."), artifact, version, path.name)
-              target.parent.mkdir(parents=True, exist_ok=True)
-              shutil.copy2(path, target)
-              copied += 1
+              for path in cache.rglob("*"):
+                  if not path.is_file() or path.suffix.lower() not in keep:
+                      continue
+                  rel = path.relative_to(cache).parts
+                  if len(rel) < 5:
+                      continue
+                  group, artifact, version = rel[0], rel[1], rel[2]
+                  target = out.joinpath(*group.split("."), artifact, version, path.name)
+                  if target.exists():
+                      continue
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copy2(path, target)
+                  copied += 1
 
           print(f"copied {copied} artifacts")
           if copied == 0:
               raise SystemExit("harvest produced nothing - the resolution step must have failed")
           PY
+
+      - name: Verify a build resolves from the bundle alone
+        working-directory: probe
+        run: |
+          GRADLE="$PWD/gradle-${GRADLE_VERSION}/bin/gradle"
+          REPO="$PWD/../localMvnRepository"
+
+          # The real test of "nothing was missed": build offline against the harvested repository
+          # only, with the IDE's init script in the way exactly as on device. A missing artifact
+          # fails here instead of on the user's phone.
+          cat > verify-init.gradle <<EOF
+          initscript {
+              repositories {
+                  maven { url '${REPO}' }
+              }
+              dependencies {
+                  classpath 'com.itsaky.androidide:gradle-plugin:${IDE_PLUGIN_VERSION}'
+              }
+          }
+
+          settingsEvaluated { settings ->
+              settings.pluginManagement.repositories.clear()
+              settings.pluginManagement.repositories.maven { url '${REPO}' }
+              settings.dependencyResolutionManagement.repositories.clear()
+              settings.dependencyResolutionManagement.repositories.maven { url '${REPO}' }
+          }
+
+          allprojects {
+              buildscript.repositories.clear()
+              buildscript.repositories.maven { url '${REPO}' }
+              repositories.clear()
+              repositories.maven { url '${REPO}' }
+          }
+          EOF
+
+          rm -rf gradle-home-verify
+          "$GRADLE" --no-daemon --offline \
+            --gradle-user-home "$PWD/gradle-home-verify" \
+            --init-script verify-init.gradle \
+            assembleDebug assembleRelease
 
       - name: Zip the repository with stored (uncompressed) entries
         run: |

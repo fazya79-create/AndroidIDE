@@ -28,7 +28,7 @@ package com.itsaky.androidide.offline
 object OfflineBundle {
 
   /** Release tag holding the assets. Bump together with the harvested contents. */
-  const val VERSION = "offline-bundle-v2"
+  const val VERSION = "offline-bundle-v3"
 
   private const val BASE_URL =
     "https://github.com/fazya79-create/AndroidIDE/releases/download/$VERSION"
