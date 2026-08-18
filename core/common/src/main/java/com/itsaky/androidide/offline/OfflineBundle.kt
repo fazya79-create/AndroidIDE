@@ -110,7 +110,10 @@ object OfflineBundle {
   /** Name of the checksum manifest published alongside the assets. */
   const val CHECKSUMS = "checksums.txt"
 
+  /** Download size of the Ubuntu base rootfs, which `BundleInstaller` fetches first. */
+  const val ROOTFS_SIZE_MB = 29
+
   /** Total download size, for the pre-download prompt. */
   val totalSizeMb: Int
-    get() = entries.sumOf { it.sizeMb }
+    get() = ROOTFS_SIZE_MB + entries.sumOf { it.sizeMb }
 }

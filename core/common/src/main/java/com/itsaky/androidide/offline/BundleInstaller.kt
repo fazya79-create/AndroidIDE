@@ -18,6 +18,9 @@
 package com.itsaky.androidide.offline
 
 import android.content.Context
+import com.itsaky.androidide.proot.InstallPhase
+import com.itsaky.androidide.proot.ProotConfig
+import com.itsaky.androidide.proot.UbuntuInstaller
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.apache.commons.compress.compressors.brotli.BrotliCompressorInputStream
@@ -76,9 +79,12 @@ class BundleInstaller(private val context: Context) {
       "split-select", "sqlite3", "zipalign", "java", "javac", "jar", "keytool", "gradle"
     )
 
-    /** Whether every bundle entry is present at the tag it is currently published under. */
+    /**
+     * Whether the setup is complete: the Linux environment plus every asset at the tag it is
+     * currently published under.
+     */
     fun isInstalled(context: Context): Boolean =
-      OfflineBundle.entries.all { isInstalled(context, it) }
+      ProotConfig.isInstalled(context) && OfflineBundle.entries.all { isInstalled(context, it) }
 
     private fun isInstalled(context: Context, entry: OfflineBundle.Entry): Boolean {
       val dest = File(context.filesDir, entry.destination)
@@ -95,6 +101,44 @@ class BundleInstaller(private val context: Context) {
 
   suspend fun install(onProgress: (BundlePhase) -> Unit): Boolean = withContext(Dispatchers.IO) {
     try {
+      // The rootfs comes first and is not optional: the tooling server's JVM is a glibc binary
+      // that runs inside it, so without a rootfs every build fails with
+      // "can't sanitize binding .../files/ubuntu" long before any dependency is needed.
+      if (!ProotConfig.isInstalled(context)) {
+        onProgress(
+          BundlePhase.Component(
+            name = "ubuntu-rootfs",
+            index = 1,
+            total = OfflineBundle.entries.size + 1
+          )
+        )
+        var rootfsFailed = false
+        UbuntuInstaller(context).install { phase ->
+          when (phase) {
+            is InstallPhase.Downloading -> onProgress(
+              BundlePhase.Downloading(phase.percent, phase.receivedMb, phase.totalMb)
+            )
+
+            is InstallPhase.Extracting -> onProgress(
+              BundlePhase.Extracting(phase.entry, phase.count)
+            )
+
+            is InstallPhase.Failed -> {
+              rootfsFailed = true
+              log.error("Ubuntu installation failed: {}", phase.message)
+            }
+
+            else -> Unit
+          }
+        }
+        if (rootfsFailed || !ProotConfig.isInstalled(context)) {
+          throw IllegalStateException("Could not install the Linux environment")
+        }
+        ProotConfig.prepareMounts(context)
+        ProotConfig.registerAndroidIds(context)
+        ProotConfig.writeShellProfile(context)
+      }
+
       // One manifest per release tag; fetched once each instead of per entry.
       val checksums = OfflineBundle.entries
         .map { it.checksumsUrl }
@@ -106,8 +150,8 @@ class BundleInstaller(private val context: Context) {
           onProgress(
             BundlePhase.Component(
               name = entry.fileName.removeSuffix(".br").removeSuffix(".zip"),
-              index = index + 1,
-              total = OfflineBundle.entries.size
+              index = index + 2,
+              total = OfflineBundle.entries.size + 1
             )
           )
           val staged = download(entry, checksums[entry.fileName], onProgress)

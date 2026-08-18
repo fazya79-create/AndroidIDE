@@ -130,12 +130,44 @@ class TerminalActivity : TermuxActivity() {
       return
     }
 
-    if (isFailsafe || !ProotConfig.isInstalled(this)) {
+    // Failsafe deliberately uses Android's shell: it exists to rescue a broken rootfs.
+    if (isFailsafe) {
       super.onCreateNewSession(isFailsafe, sessionName, workingDirectory)
       return
     }
 
+    // Falling through to the base implementation when the rootfs is missing lands the user in
+    // Android's /system/bin/sh with no bash, no apt and no toolchain. Install it instead.
+    if (!ProotConfig.isInstalled(this)) {
+      installRootfsThen { addUbuntuSession(sessionName) }
+      return
+    }
+
     addUbuntuSession(sessionName)
+  }
+
+  /** Downloads and unpacks the Ubuntu rootfs, then runs [onReady]. */
+  private fun installRootfsThen(onReady: () -> Unit) {
+    val progress = MaterialAlertDialogBuilder(this)
+      .setTitle(R.string.title_installing_ubuntu)
+      .setMessage(R.string.msg_preparing)
+      .setCancelable(false)
+      .show()
+
+    setupScope.launch {
+      val ready = ToolchainSetup.prepare(this@TerminalActivity) { phase ->
+        setupScope.launch { progress.setMessage(describe(phase)) }
+      }
+
+      progress.dismiss()
+
+      if (!ready) {
+        flashError(R.string.msg_cannot_create_terminal_session)
+        return@launch
+      }
+
+      onReady()
+    }
   }
 
   /**
@@ -201,7 +233,7 @@ class TerminalActivity : TermuxActivity() {
   }
 
   /**
-   * Installs the Ubuntu rootfs, then opens an interactive shell inside it.
+   * Ensures the Ubuntu rootfs exists, then opens an interactive shell inside it.
    *
    * No toolchain installation happens here any more: the JDK, SDK and Gradle are extracted from
    * release assets during onboarding, so this only has to make the rootfs itself available.
@@ -209,41 +241,11 @@ class TerminalActivity : TermuxActivity() {
   private fun addIdesetupSession() {
     log.debug("Preparing the Ubuntu rootfs")
 
-    val progress = MaterialAlertDialogBuilder(this)
-      .setTitle(R.string.title_installing_ubuntu)
-      .setMessage(R.string.msg_preparing)
-      .setCancelable(false)
-      .show()
-
-    setupScope.launch {
-      val ready = ToolchainSetup.prepare(this@TerminalActivity) { phase ->
-        setupScope.launch { progress.setMessage(describe(phase)) }
-      }
-
-      progress.dismiss()
-
-      if (!ready) {
-        flashError(R.string.msg_cannot_create_terminal_session)
-        return@launch
-      }
-
-      val session = termuxService.createTermuxSession(
-        /* executablePath = */ ProotConfig.prootBinary(this@TerminalActivity),
-        /* arguments = */ ProotConfig.shellArgs(
-          context = this@TerminalActivity,
-          keepAlive = true
-        ).drop(1).toTypedArray(),
-        /* stdin = */ null,
-        /* workingDirectory = */ Environment.HOME.absolutePath,
-        /* isFailSafe = */ false,
-        /* sessionName = */ SETUP_SESSION_NAME,
-        /* additionalEnvironment = */ HashMap(ProotConfig.prootEnvMap(this@TerminalActivity))
-      ) ?: run {
-        flashError(R.string.msg_cannot_create_terminal_session)
-        return@launch
-      }
-
-      termuxTerminalSessionClient.setCurrentSession(session.terminalSession)
+    if (ProotConfig.isInstalled(this)) {
+      addUbuntuSession(SETUP_SESSION_NAME)
+      return
     }
+
+    installRootfsThen { addUbuntuSession(SETUP_SESSION_NAME) }
   }
 }
